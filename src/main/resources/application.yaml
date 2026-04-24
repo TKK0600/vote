@@ -1,0 +1,25 @@
+spring:
+  application:
+    name: vote
+  mail:
+    host: smtp.gmail.com
+    port: 587
+    username: kahkian0630@gmail.com
+    password: oprbegylrhssapok
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+
+spring.datasource:
+  url: jdbc:mysql://localhost:3306/vote
+  username: root
+  password: P@ssw0rd
+
+token:
+  expiry: 5 #5 minutes
+
+frontend:
+  url: http://localhost:8080
