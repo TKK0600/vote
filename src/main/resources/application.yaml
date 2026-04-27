@@ -12,6 +12,9 @@ spring:
           auth: true
           starttls:
             enable: true
+  jpa:
+    hibernate:
+      ddl-auto: update
 
 spring.datasource:
   url: jdbc:mysql://localhost:3306/vote
@@ -19,6 +22,8 @@ spring.datasource:
   password: P@ssw0rd
 
 token:
+  jwt:
+    secret: 5910e844-0dc4-11eb-adc1-0242ac120002
   expiry: 5 #5 minutes
 
 frontend:

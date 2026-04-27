@@ -1,5 +1,6 @@
-package com.example.vote.modal.user;
+package com.example.vote.modal.token;
 
+import com.example.vote.modal.user.User;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
@@ -14,7 +15,7 @@ import java.time.LocalDateTime;
 
 @Data
 @Entity
-@Table(name = "VerificationToken")
+@Table(name = "verification_token")
 public class VerificationToken {
 
     @Id

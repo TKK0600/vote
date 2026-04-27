@@ -1,14 +1,22 @@
 package com.example.vote.service.user;
 
+import com.example.vote.dto.user.AuthResponse;
+import com.example.vote.dto.user.LoginReqDTO;
 import com.example.vote.dto.user.UserRegisterReqDTO;
+import com.example.vote.jwt.JwtUtil;
+import com.example.vote.modal.token.RefreshToken;
 import com.example.vote.modal.user.User;
-import com.example.vote.modal.user.VerificationToken;
+import com.example.vote.modal.token.VerificationToken;
+import com.example.vote.repository.user.RefreshTokenRepository;
 import com.example.vote.repository.user.UserRepository;
 import com.example.vote.repository.user.VerificationTokenRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -20,7 +28,7 @@ import java.util.UUID;
 @Slf4j
 @RequiredArgsConstructor
 @Service
-public class Authentication {
+public class AuthenticationService {
 
     private final UserRepository userRepository;
 
@@ -29,6 +37,13 @@ public class Authentication {
     private final VerificationTokenRepository verificationTokenRepository;
 
     private final MailService mailService;
+
+    @Autowired
+    private AuthenticationManager authenticationManager;
+
+    private final JwtUtil jwtUtil;
+
+    private final RefreshTokenService refreshTokenService;
 
     @Value("${token.expiry}")
     private Long tokenExpiryMinutes;
@@ -103,5 +118,20 @@ public class Authentication {
         token.setExpiryDate(LocalDateTime.now().plusMinutes(tokenExpiryMinutes));
 
         return verificationTokenRepository.save(token);
+    }
+
+    public AuthResponse login(LoginReqDTO request) {
+
+        authenticationManager.authenticate(
+                new UsernamePasswordAuthenticationToken(
+                        request.getEmail(),
+                        request.getPassword()
+                )
+        );
+
+        String accessToken = jwtUtil.generateAccessToken(request.getEmail());
+        RefreshToken refreshToken = refreshTokenService.createRefreshToken(request.getEmail());
+
+        return new AuthResponse(accessToken, refreshToken.getToken());
     }
 }

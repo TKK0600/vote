@@ -1,7 +1,7 @@
 package com.example.vote.repository.user;
 
 import com.example.vote.modal.user.User;
-import com.example.vote.modal.user.VerificationToken;
+import com.example.vote.modal.token.VerificationToken;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.Optional;

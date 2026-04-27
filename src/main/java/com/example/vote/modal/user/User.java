@@ -30,10 +30,9 @@ public class User {
     @Column(unique = true)
     private String email;
 
-    private String accName;
+    private String userName;
 
-
-    private String displayName;
+    private String role;
 
     private String password;
 

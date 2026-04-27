@@ -8,4 +8,8 @@ public final class CommonConst {
     public static final String FAILED = "400";
 
     public static final String FAILED_MSG = "failed!";
+
+    public static final String ACTIVE = "A";
+
+    public static final String INACTIVE = "D";
 }
