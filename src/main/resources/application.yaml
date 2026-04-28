@@ -13,13 +13,16 @@ spring:
           starttls:
             enable: true
   jpa:
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
     hibernate:
       ddl-auto: update
+    show-sql: true
 
 spring.datasource:
-  url: jdbc:mysql://localhost:3306/vote
-  username: root
+  url: jdbc:postgresql://localhost:5432/your_quest  #jdbc:mysql://localhost:3306/vote
+  username: postgres  #root
   password: P@ssw0rd
+  driver-class-name: org.postgresql.Driver
 
 token:
   jwt:
