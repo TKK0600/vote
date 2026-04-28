@@ -1,10 +1,10 @@
-package com.example.vote.mapstruct.user;
+package com.example.vote.mapstruct.auth;
 
 import com.example.vote.config.MapStructConfig;
-import com.example.vote.dto.user.LoginReqDTO;
-import com.example.vote.dto.user.UserRegisterReqDTO;
-import com.example.vote.vo.user.LoginVo;
-import com.example.vote.vo.user.RegistrationVo;
+import com.example.vote.dto.auth.LoginReqDTO;
+import com.example.vote.dto.auth.UserRegisterReqDTO;
+import com.example.vote.vo.auth.LoginVo;
+import com.example.vote.vo.auth.RegistrationVo;
 import org.mapstruct.Mapper;
 
 

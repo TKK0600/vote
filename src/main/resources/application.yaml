@@ -31,3 +31,7 @@ token:
 
 frontend:
   url: http://localhost:8080
+
+google:
+  oauth:
+    client-id: 682908466873-llntklr9v5ej7hl6t89nbvftu3lbg32j.apps.googleusercontent.com

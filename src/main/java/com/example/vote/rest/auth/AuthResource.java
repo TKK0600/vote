@@ -1,18 +1,19 @@
-package com.example.vote.rest.authentication;
+package com.example.vote.rest.auth;
 
-import com.example.vote.dto.user.AuthResponse;
-import com.example.vote.dto.user.LoginReqDTO;
-import com.example.vote.dto.user.RefreshReqDTO;
-import com.example.vote.dto.user.UserRegisterReqDTO;
+import com.example.vote.dto.auth.AuthResponse;
+import com.example.vote.dto.auth.LoginReqDTO;
+import com.example.vote.dto.auth.RefreshReqDTO;
+import com.example.vote.dto.auth.UserRegisterReqDTO;
 import com.example.vote.jwt.JwtUtil;
-import com.example.vote.mapstruct.user.UserMapStruct;
+import com.example.vote.mapstruct.auth.UserMapStruct;
 import com.example.vote.modal.token.RefreshToken;
-import com.example.vote.repository.user.RefreshTokenRepository;
-import com.example.vote.service.user.AuthenticationService;
-import com.example.vote.service.user.RefreshTokenService;
+import com.example.vote.repository.auth.RefreshTokenRepository;
+import com.example.vote.service.auth.AuthenticationService;
+import com.example.vote.service.auth.RefreshTokenService;
 import com.example.vote.util.BoUtil;
-import com.example.vote.vo.user.LoginVo;
-import com.example.vote.vo.user.RegistrationVo;
+import com.example.vote.vo.auth.GoogleLoginVo;
+import com.example.vote.vo.auth.LoginVo;
+import com.example.vote.vo.auth.RegistrationVo;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -76,5 +77,14 @@ public class AuthResource {
     public ResponseEntity<?> login(@RequestBody LoginVo request) {
         LoginReqDTO loginReqDTO = userMapStruct.loginVoToReqDto(request);
         return ResponseEntity.ok(authService.login(loginReqDTO));
+    }
+
+    @PostMapping("/google/login")
+    public ResponseEntity<?> googleLogin(@RequestBody GoogleLoginVo request) {
+        try {
+            return ResponseEntity.ok(authService.googleLogin(request.getIdToken()));
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
     }
 }

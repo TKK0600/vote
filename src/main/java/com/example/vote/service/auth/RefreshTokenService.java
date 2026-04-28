@@ -1,9 +1,9 @@
-package com.example.vote.service.user;
+package com.example.vote.service.auth;
 
 import com.example.vote.constant.CommonConst;
 import com.example.vote.modal.token.RefreshToken;
 import com.example.vote.modal.user.User;
-import com.example.vote.repository.user.RefreshTokenRepository;
+import com.example.vote.repository.auth.RefreshTokenRepository;
 import com.example.vote.repository.user.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;

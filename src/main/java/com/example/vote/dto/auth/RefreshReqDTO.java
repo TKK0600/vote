@@ -1,4 +1,4 @@
-package com.example.vote.dto.user;
+package com.example.vote.dto.auth;
 
 import lombok.Data;
 

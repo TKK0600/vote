@@ -1,4 +1,4 @@
-package com.example.vote.repository.user;
+package com.example.vote.repository.auth;
 
 import com.example.vote.modal.user.User;
 import com.example.vote.modal.token.VerificationToken;

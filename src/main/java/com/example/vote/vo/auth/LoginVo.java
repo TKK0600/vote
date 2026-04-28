@@ -1,4 +1,4 @@
-package com.example.vote.vo.user;
+package com.example.vote.vo.auth;
 
 import lombok.Data;
 

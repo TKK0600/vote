@@ -1,11 +1,11 @@
-package com.example.vote.vo.user;
+package com.example.vote.dto.auth;
 
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import lombok.Data;
 
 @Data
-public class RegistrationVo {
+public class UserRegisterReqDTO {
     @Email
     @NotBlank
     private String email;

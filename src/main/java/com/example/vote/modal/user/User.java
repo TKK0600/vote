@@ -34,11 +34,6 @@ public class User {
 
     private String role;
 
-    private String password;
-
-    @Column(name = "email_verified")
-    private boolean emailVerified;
-
     private LocalDateTime createdDate;
 
     // @Column(length = 4)
