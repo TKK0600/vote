@@ -1,12 +1,13 @@
 package com.example.vote.jwt;
 
+import com.example.vote.constant.CommonConst;
+import com.example.vote.repository.user.UserRepository;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -24,6 +25,8 @@ public class JwtFilter extends OncePerRequestFilter {
     private final JwtUtil jwtUtil;
 
     private final UserDetailsService userDetailsService;
+
+    private final UserRepository userRepository;
 
     @Override
     protected void doFilterInternal(HttpServletRequest request,
@@ -45,6 +48,14 @@ public class JwtFilter extends OncePerRequestFilter {
                             new UsernamePasswordAuthenticationToken(user, null, user.getAuthorities());
 
                     SecurityContextHolder.getContext().setAuthentication(auth);
+
+                    Long userId = jwtUtil.extractUserId(token);
+                    if (userId == null) {
+                        userId = userRepository.findByEmail(username).map(u -> u.getId()).orElse(null);
+                    }
+                    if (userId != null) {
+                        request.setAttribute(CommonConst.REQUEST_USER_ID_ATTR, userId);
+                    }
                 }
             } catch (Exception e) {
                 log.info("JWT authentication failed: {}", e.getMessage());

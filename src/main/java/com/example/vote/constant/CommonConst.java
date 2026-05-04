@@ -12,4 +12,6 @@ public final class CommonConst {
     public static final String ACTIVE = "A";
 
     public static final String INACTIVE = "D";
+
+    public static final String REQUEST_USER_ID_ATTR = "userId";
 }

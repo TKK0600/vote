@@ -15,8 +15,19 @@ spring:
   jpa:
     database-platform: org.hibernate.dialect.PostgreSQLDialect
     hibernate:
-      ddl-auto: update
+      ddl-auto: validate
     show-sql: true
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+  ai:
+    openai:
+      api-key: sk-4a252bd04e3240c4b9eb52361da9efb2
+      base-url: https://api.deepseek.com # point to DeepSeek's endpoint
+      chat:
+        options:
+          model: deepseek-chat           # or deepseek-reasoner for R1
+          temperature: 0.7
 
 spring.datasource:
   url: jdbc:postgresql://localhost:5432/your_quest  #jdbc:mysql://localhost:3306/vote

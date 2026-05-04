@@ -68,7 +68,8 @@ public class AuthResource {
         refreshTokenService.verifyExpiration(refreshToken);
 
         String email = refreshToken.getUser().getEmail();
-        String newAccessToken = jwtUtil.generateAccessToken(email);
+        Long userId = refreshToken.getUser().getId();
+        String newAccessToken = jwtUtil.generateAccessToken(email, userId);
 
         return ResponseEntity.ok(new AuthResponse(newAccessToken, request.getRefreshToken()));
     }

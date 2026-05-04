@@ -135,7 +135,11 @@ public class AuthenticationService {
                 new UsernamePasswordAuthenticationToken(request.getEmail(), request.getPassword())
         );
 
-        String accessToken = jwtUtil.generateAccessToken(request.getEmail());
+        Long userId = userRepository.findByEmail(request.getEmail())
+                .map(User::getId)
+                .orElseThrow(() -> new IllegalArgumentException("User not found"));
+
+        String accessToken = jwtUtil.generateAccessToken(request.getEmail(), userId);
         RefreshToken refreshToken = refreshTokenService.createRefreshToken(request.getEmail());
 
         userAuthProviderRepository
@@ -157,7 +161,7 @@ public class AuthenticationService {
 
         upsertGoogleProvider(user, userInfo);
 
-        String accessToken = jwtUtil.generateAccessToken(user.getEmail());
+        String accessToken = jwtUtil.generateAccessToken(user.getEmail(), user.getId());
         RefreshToken refreshToken = refreshTokenService.createRefreshToken(user.getEmail());
         return new AuthResponse(accessToken, refreshToken.getToken());
     }
