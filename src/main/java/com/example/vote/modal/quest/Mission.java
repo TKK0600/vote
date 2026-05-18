@@ -13,6 +13,8 @@ import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import lombok.Data;
 
+import java.time.LocalDateTime;
+
 // Mission.java
 @Data
 @Entity
@@ -31,6 +33,9 @@ public class Mission {
 
     @Column(columnDefinition = "TEXT")
     private String description;
+
+    @Column(name = "duration")
+    private LocalDateTime duration;
 
     @Enumerated(EnumType.STRING)
     private Difficulty difficulty;

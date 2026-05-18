@@ -1,15 +1,21 @@
 package com.example.vote.jwt;
 
+import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.JwtParser;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
+import javax.crypto.SecretKey;
+import java.nio.charset.StandardCharsets;
 import java.util.Date;
 import java.util.Map;
 
 @Component
 public class JwtUtil {
+
+    private static final long ACCESS_TOKEN_EXPIRY_MS = 1000L * 60 * 15; // 15 minutes
 
     @Value("${token.jwt.secret}")
     private String secretKey;
@@ -19,36 +25,17 @@ public class JwtUtil {
                 .setSubject(email)
                 .addClaims(Map.of("uid", userId))
                 .setIssuedAt(new Date())
-                .setExpiration(new Date(System.currentTimeMillis() + 1000 * 60 * 15)) // 15 min
-                .signWith(Keys.hmacShaKeyFor(secretKey.getBytes()))
-                .compact();
-    }
-
-    public String generateRefreshToken(String email) {
-        return Jwts.builder()
-                .setSubject(email)
-                .setIssuedAt(new Date())
-                .setExpiration(new Date(System.currentTimeMillis() + 1000 * 60 * 60 * 24 * 7)) // 7 days
-                .signWith(Keys.hmacShaKeyFor(secretKey.getBytes()))
+                .setExpiration(new Date(System.currentTimeMillis() + ACCESS_TOKEN_EXPIRY_MS))
+                .signWith(getSigningKey())
                 .compact();
     }
 
     public String extractUserEmail(String token) {
-        return Jwts.parserBuilder()
-                .setSigningKey(secretKey.getBytes())
-                .build()
-                .parseClaimsJws(token)
-                .getBody()
-                .getSubject();
+        return parseToken(token).getSubject();
     }
 
     public Long extractUserId(String token) {
-        Object uid = Jwts.parserBuilder()
-                .setSigningKey(secretKey.getBytes())
-                .build()
-                .parseClaimsJws(token)
-                .getBody()
-                .get("uid");
+        Object uid = parseToken(token).get("uid");
 
         if (uid instanceof Integer integerUid) {
             return integerUid.longValue();
@@ -60,5 +47,19 @@ public class JwtUtil {
             return Long.parseLong(stringUid);
         }
         return null;
+    }
+
+    private Claims parseToken(String token) {
+        return createParser().parseClaimsJws(token).getBody();
+    }
+
+    private JwtParser createParser() {
+        return Jwts.parserBuilder()
+                .setSigningKey(getSigningKey())
+                .build();
+    }
+
+    private SecretKey getSigningKey() {
+        return Keys.hmacShaKeyFor(secretKey.getBytes(StandardCharsets.UTF_8));
     }
 }

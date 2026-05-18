@@ -3,20 +3,21 @@ package com.example.vote.service.auth;
 import com.example.vote.dto.auth.AuthResponse;
 import com.example.vote.dto.auth.LoginReqDTO;
 import com.example.vote.dto.auth.UserRegisterReqDTO;
+import com.example.vote.exception.EmailAlreadyExistsException;
+import com.example.vote.exception.OAuth2AuthenticationException;
 import com.example.vote.jwt.JwtUtil;
 import com.example.vote.modal.auth.UserAuthProvider;
 import com.example.vote.modal.token.RefreshToken;
 import com.example.vote.modal.token.VerificationToken;
 import com.example.vote.modal.user.User;
+import com.example.vote.repository.auth.RefreshTokenRepository;
 import com.example.vote.repository.auth.UserAuthProviderRepository;
 import com.example.vote.repository.auth.VerificationTokenRepository;
 import com.example.vote.repository.user.UserRepository;
 import com.example.vote.service.mail.MailService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -25,7 +26,6 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import java.time.LocalDateTime;
-import java.util.Optional;
 import java.util.UUID;
 
 @Slf4j
@@ -34,6 +34,7 @@ import java.util.UUID;
 public class AuthenticationService {
     private static final String PROVIDER_EMAIL = "email";
     private static final String PROVIDER_GOOGLE = "google";
+    private static final int MIN_PASSWORD_LENGTH = 8;
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
@@ -43,9 +44,8 @@ public class AuthenticationService {
     private final RefreshTokenService refreshTokenService;
     private final GoogleTokenVerifierService googleTokenVerifierService;
     private final UserAuthProviderRepository userAuthProviderRepository;
-
-    @Autowired
-    private AuthenticationManager authenticationManager;
+    private final RefreshTokenRepository refreshTokenRepository;
+    private final AuthenticationManager authenticationManager;
 
     @Value("${token.expiry}")
     private Long tokenExpiryMinutes;
@@ -54,102 +54,53 @@ public class AuthenticationService {
     private String frontendUrl;
 
     @Transactional
-    public ResponseEntity<String> initRegister(UserRegisterReqDTO regDto) {
-        User user = userRepository.findByEmail(regDto.getEmail()).orElseGet(() -> {
-            User newUser = new User();
-            newUser.setEmail(regDto.getEmail());
-            newUser.setUserName(resolveUsernameFromEmail(regDto.getEmail()));
-            newUser.setCreatedDate(LocalDateTime.now());
-            return userRepository.save(newUser);
-        });
+    public UserRegisterResult initRegister(UserRegisterReqDTO regDto) {
+        validatePassword(regDto.getPassword());
 
-        Optional<UserAuthProvider> existingEmailProvider =
-                userAuthProviderRepository.findByUserIdAndProvider(user.getId(), PROVIDER_EMAIL);
-        if (existingEmailProvider.isPresent()) {
-            return ResponseEntity.badRequest().body("Email already registered with password login");
-        }
+        User user = findOrCreateUserByEmail(regDto.getEmail());
+        ensureEmailProviderNotExists(user);
+        createEmailAuthProvider(user, regDto.getPassword());
+        sendVerificationEmail(user);
 
-        UserAuthProvider emailProvider = new UserAuthProvider();
-        emailProvider.setUser(user);
-        emailProvider.setProvider(PROVIDER_EMAIL);
-        emailProvider.setEmail(user.getEmail());
-        emailProvider.setPasswordHash(passwordEncoder.encode(regDto.getPassword()));
-        emailProvider.setEmailVerified(false);
-        userAuthProviderRepository.save(emailProvider);
-
-        VerificationToken token = createTokenForUser(user);
-        String verifyLink = frontendUrl + "/verify?token=" + token.getToken();
-
-        mailService.sendEmail(
-                user.getEmail(),
-                "Email Verification",
-                "Click the link to verify: " + verifyLink
-        );
-
-        return ResponseEntity.ok("Verification email sent successfully");
+        return new UserRegisterResult(user.getId(), user.getEmail());
     }
 
-    public ResponseEntity<String> verifyEmail(String token) {
-        Optional<VerificationToken> optionalToken = verificationTokenRepository.findByToken(token);
-        if (optionalToken.isEmpty()) {
-            return ResponseEntity.badRequest().body("Invalid verification token");
-        }
-
-        VerificationToken verificationToken = optionalToken.get();
-        User user = verificationToken.getUser();
-
-        Optional<UserAuthProvider> emailProviderOptional =
-                userAuthProviderRepository.findByUserIdAndProvider(user.getId(), PROVIDER_EMAIL);
-        if (emailProviderOptional.isEmpty()) {
-            return ResponseEntity.badRequest().body("No email provider found for this user");
-        }
+    public void verifyEmail(String token) {
+        VerificationToken verificationToken = verificationTokenRepository.findByToken(token)
+                .orElseThrow(() -> new IllegalArgumentException("Invalid verification token"));
 
         if (verificationToken.getExpiryDate().isBefore(LocalDateTime.now())) {
-            return ResponseEntity.badRequest().body("Token expired");
+            throw new IllegalArgumentException("Verification token expired");
         }
 
-        UserAuthProvider emailProvider = emailProviderOptional.get();
+        User user = verificationToken.getUser();
+        UserAuthProvider emailProvider = userAuthProviderRepository
+                .findByUserIdAndProvider(user.getId(), PROVIDER_EMAIL)
+                .orElseThrow(() -> new IllegalArgumentException("No email provider found for this user"));
+
         if (emailProvider.isEmailVerified()) {
-            return ResponseEntity.badRequest().body("Email already verified");
+            throw new IllegalArgumentException("Email already verified");
         }
 
         emailProvider.setEmailVerified(true);
         userAuthProviderRepository.save(emailProvider);
 
         log.info("Email verified for user: {}", user.getEmail());
-        return ResponseEntity.ok("Email verified successfully");
     }
 
-    private VerificationToken createTokenForUser(User user) {
-        verificationTokenRepository.deleteByUser(user);
-
-        VerificationToken token = new VerificationToken();
-        token.setToken(UUID.randomUUID().toString());
-        token.setUser(user);
-        token.setExpiryDate(LocalDateTime.now().plusMinutes(tokenExpiryMinutes));
-        return verificationTokenRepository.save(token);
-    }
-
+    @Transactional
     public AuthResponse login(LoginReqDTO request) {
+        log.info("Login attempt for email: {}", request.getEmail());
+
         authenticationManager.authenticate(
-                new UsernamePasswordAuthenticationToken(request.getEmail(), request.getPassword())
-        );
+                new UsernamePasswordAuthenticationToken(request.getEmail(), request.getPassword()));
 
-        Long userId = userRepository.findByEmail(request.getEmail())
-                .map(User::getId)
-                .orElseThrow(() -> new IllegalArgumentException("User not found"));
+        User user = userRepository.findByEmail(request.getEmail())
+                .orElseThrow(() -> new IllegalArgumentException("User record not found"));
 
-        String accessToken = jwtUtil.generateAccessToken(request.getEmail(), userId);
-        RefreshToken refreshToken = refreshTokenService.createRefreshToken(request.getEmail());
+        updateLastLogin(user.getEmail());
 
-        userAuthProviderRepository
-                .findByProviderAndEmail(PROVIDER_EMAIL, request.getEmail())
-                .ifPresent(provider -> {
-                    provider.setLastLogin(LocalDateTime.now());
-                    userAuthProviderRepository.save(provider);
-                });
-
-        return new AuthResponse(accessToken, refreshToken.getToken());
+        return generateAuthResponse(user);
     }
 
     @Transactional
@@ -161,6 +112,68 @@ public class AuthenticationService {
 
         upsertGoogleProvider(user, userInfo);
 
+        return generateAuthResponse(user);
+    }
+
+    // --- Private helper methods ---
+
+    private User findOrCreateUserByEmail(String email) {
+        return userRepository.findByEmail(email).orElseGet(() -> {
+            User newUser = new User();
+            newUser.setEmail(email);
+            newUser.setUserName(resolveUsernameFromEmail(email));
+            newUser.setCreatedDate(LocalDateTime.now());
+            return userRepository.save(newUser);
+        });
+    }
+
+    private void ensureEmailProviderNotExists(User user) {
+        userAuthProviderRepository.findByUserIdAndProvider(user.getId(), PROVIDER_EMAIL)
+                .ifPresent(existing -> {
+                    throw new EmailAlreadyExistsException("Email already registered with password login");
+                });
+    }
+
+    private void createEmailAuthProvider(User user, String rawPassword) {
+        UserAuthProvider provider = new UserAuthProvider();
+        provider.setUser(user);
+        provider.setProvider(PROVIDER_EMAIL);
+        provider.setEmail(user.getEmail());
+        provider.setPasswordHash(passwordEncoder.encode(rawPassword));
+        provider.setEmailVerified(false);
+        userAuthProviderRepository.save(provider);
+    }
+
+    private void sendVerificationEmail(User user) {
+        VerificationToken token = createVerificationToken(user);
+        String verifyLink = frontendUrl + "/verify?token=" + token.getToken();
+
+        mailService.sendEmail(
+                user.getEmail(),
+                "Email Verification",
+                "Click the link to verify: " + verifyLink);
+    }
+
+    private VerificationToken createVerificationToken(User user) {
+        verificationTokenRepository.deleteByUser(user);
+
+        VerificationToken token = new VerificationToken();
+        token.setToken(UUID.randomUUID().toString());
+        token.setUser(user);
+        token.setExpiryDate(LocalDateTime.now().plusMinutes(tokenExpiryMinutes));
+        return verificationTokenRepository.save(token);
+    }
+
+    private void updateLastLogin(String email) {
+        userAuthProviderRepository
+                .findByProviderAndEmail(PROVIDER_EMAIL, email)
+                .ifPresentOrElse(provider -> {
+                    provider.setLastLogin(LocalDateTime.now());
+                    userAuthProviderRepository.saveAndFlush(provider);
+                }, () -> log.warn("No AuthProvider found to update last login for: {}", email));
+    }
+
+    private AuthResponse generateAuthResponse(User user) {
         String accessToken = jwtUtil.generateAccessToken(user.getEmail(), user.getId());
         RefreshToken refreshToken = refreshTokenService.createRefreshToken(user.getEmail());
         return new AuthResponse(accessToken, refreshToken.getToken());
@@ -175,33 +188,51 @@ public class AuthenticationService {
     }
 
     private void upsertGoogleProvider(User user, GoogleTokenVerifierService.GoogleUserInfo userInfo) {
-        Optional<UserAuthProvider> byGoogleId = userAuthProviderRepository
-                .findByProviderAndProviderUserId(PROVIDER_GOOGLE, userInfo.providerUserId());
-        if (byGoogleId.isPresent() && !byGoogleId.get().getUser().getId().equals(user.getId())) {
-            throw new IllegalArgumentException("Google account is already linked to another user");
-        }
+        validateGoogleProviderNotLinkedToOtherUser(user, userInfo);
 
         UserAuthProvider googleProvider = userAuthProviderRepository
                 .findByUserIdAndProvider(user.getId(), PROVIDER_GOOGLE)
-                .orElseGet(() -> {
-                    UserAuthProvider created = new UserAuthProvider();
-                    created.setUser(user);
-                    created.setProvider(PROVIDER_GOOGLE);
-                    created.setEmail(user.getEmail());
-                    created.setCreatedAt(LocalDateTime.now());
-                    return created;
-                });
+                .orElseGet(() -> createNewGoogleProvider(user));
 
-        if (StringUtils.hasText(googleProvider.getProviderUserId())
-                && !googleProvider.getProviderUserId().equals(userInfo.providerUserId())) {
-            throw new IllegalArgumentException("Google provider id mismatch for this user");
-        }
+        validateProviderIdMatches(googleProvider, userInfo.providerUserId());
 
         googleProvider.setProviderUserId(userInfo.providerUserId());
         googleProvider.setEmail(user.getEmail());
         googleProvider.setEmailVerified(true);
         googleProvider.setLastLogin(LocalDateTime.now());
         userAuthProviderRepository.save(googleProvider);
+    }
+
+    private void validateGoogleProviderNotLinkedToOtherUser(User user, GoogleTokenVerifierService.GoogleUserInfo userInfo) {
+        userAuthProviderRepository
+                .findByProviderAndProviderUserId(PROVIDER_GOOGLE, userInfo.providerUserId())
+                .ifPresent(existing -> {
+                    if (!existing.getUser().getId().equals(user.getId())) {
+                        throw new OAuth2AuthenticationException("Google account is already linked to another user");
+                    }
+                });
+    }
+
+    private UserAuthProvider createNewGoogleProvider(User user) {
+        UserAuthProvider provider = new UserAuthProvider();
+        provider.setUser(user);
+        provider.setProvider(PROVIDER_GOOGLE);
+        provider.setEmail(user.getEmail());
+        provider.setCreatedAt(LocalDateTime.now());
+        return provider;
+    }
+
+    private void validateProviderIdMatches(UserAuthProvider provider, String providerUserId) {
+        if (StringUtils.hasText(provider.getProviderUserId())
+                && !provider.getProviderUserId().equals(providerUserId)) {
+            throw new OAuth2AuthenticationException("Google provider ID mismatch for this user");
+        }
+    }
+
+    private void validatePassword(String password) {
+        if (!StringUtils.hasText(password) || password.length() < MIN_PASSWORD_LENGTH) {
+            throw new IllegalArgumentException("Password must be at least " + MIN_PASSWORD_LENGTH + " characters");
+        }
     }
 
     private String resolveUsername(GoogleTokenVerifierService.GoogleUserInfo userInfo) {
@@ -215,4 +246,6 @@ public class AuthenticationService {
         int index = email.indexOf("@");
         return index > 0 ? email.substring(0, index) : email;
     }
+
+    public record UserRegisterResult(Long userId, String email) {}
 }

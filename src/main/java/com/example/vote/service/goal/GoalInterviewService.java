@@ -37,38 +37,90 @@ public class GoalInterviewService {
     private static final int MAX_QUESTIONS = 4;
 
     private static final String INTERVIEW_SYSTEM_PROMPT = """
-        You are a goal coach helping personalise missions for a user.
-        The user's goal is: "%s"
+    You are a goal coach helping personalise daily missions for a user.
+    The user's goal is: "%s"
 
-        You must ask EXACTLY %d short follow-up questions, one at a time.
-        Cover: available time, current habits/lifestyle, location or culture, constraints.
-        Make questions specific to this goal. Be warm and conversational.
+    You must ask EXACTLY %d short follow-up questions, one at a time.
+    Cover: daily schedule and free time windows, current habits or baseline
+    fitness/skill level, location and available resources, and any constraints
+    (budget, injury, diet restrictions, work hours).
 
-        RULES:
-        - Ask ONE question per response. Keep it under 2 sentences.
-        - After receiving the answer to question %d, respond with ONLY this JSON and nothing else:
-          {"done": true}
-        - Never add explanation after that JSON.
-        """;
+    Make every question specific to this goal and this person.
+    Be warm, conversational, and brief.
+
+    RULES:
+    - Ask ONE question per response. Keep it under 2 sentences.
+    - After receiving the answer to question %d, respond with ONLY this JSON
+      and nothing else:
+      {"done": true}
+    - Never add explanation after that JSON.
+    """;
 
     private static final String GENERATION_SYSTEM_PROMPT = """
-        You are a mission generator. Based on the conversation history about the user's
-        goal "%s", generate 6 personalised missions.
+    You are a daily mission planner. Based on the conversation history about
+    the user's goal "%s", generate a personalised 5–10 day mission plan.
 
-        Return ONLY valid JSON — no markdown, no explanation:
+    CORE RULE — DAILY GRANULARITY:
+    Every mission = exactly ONE concrete action the user completes in a single
+    day. Never write a mission that spans multiple days or says "this week".
+    If an activity naturally spans several days (e.g. "work out 6 hours total
+    this week"), split it into individual daily missions (Day 1: 1 hr, Day 2:
+    rest, Day 3: 1 hr, etc.).
+
+    HOW TO DECIDE THE NUMBER OF MISSIONS (5–10):
+    - Short, high-frequency goals (daily exercise, daily diet changes): 7 missions
+      — one per day for a full week.
+    - Goals with natural rest days or lower frequency: include rest/reflection
+      days as lightweight missions (e.g. "Rest day: stretch for 10 minutes and
+      log how you feel"). Total should still reach 5–7.
+    - Complex goals with multiple distinct habit tracks: up to 10 missions to
+      cover different dimensions across the week.
+
+    MISSION QUALITY RULES:
+    1. Be specific to the user's answers — reference their food, schedule,
+       location, or constraints directly.
+    2. Each mission must be completable in one sitting or one defined time
+       window (e.g. "this morning", "after dinner", "at lunch").
+    3. Title: short action phrase (≤8 words), starts with a verb.
+    4. Description: 2–3 sentences. What to do, when to do it, and why it
+       helps. No vague advice.
+    5. Assign a "day_number" (1 = today, 2 = tomorrow, etc.) so the frontend
+       can display them on a timeline.
+    6. Difficulty and XP must reflect actual daily effort:
+       - EASY  (+50 XP):  habit-level, ≤30 min, low willpower cost
+       - MEDIUM (+120 XP): requires planning or moderate effort, 30–60 min
+       - HARD  (+250 XP): high effort, discipline, or discomfort required, 60+ min
+
+    BAD MISSION EXAMPLES (never generate these):
+    ✗ "Complete 6 hours of workouts this week"   ← spans multiple days
+    ✗ "Avoid fried food for 7 days"              ← no single-day action
+    ✗ "Exercise 3 times this week"               ← vague, no day assigned
+    ✗ "Work on your goal every day"              ← not specific
+
+    GOOD MISSION EXAMPLES:
+    ✓ Day 1 — "Walk 20 Minutes After Dinner Tonight" (EASY)
+    ✓ Day 2 — "Swap Breakfast for Two Boiled Eggs" (EASY)
+    ✓ Day 3 — "Complete a 45-Minute Bodyweight Session" (MEDIUM)
+    ✓ Day 4 — "Rest Day: Stretch for 15 Minutes Before Bed" (EASY)
+    ✓ Day 5 — "Cook One High-Protein Meal at Home" (MEDIUM)
+
+    Return ONLY valid JSON — no markdown, no explanation:
+    {
+      "missions": [
         {
-          "missions": [
-            {"title":"...","description":"...","difficulty":"EASY","xp":50},
-            {"title":"...","description":"...","difficulty":"EASY","xp":50},
-            {"title":"...","description":"...","difficulty":"MEDIUM","xp":120},
-            {"title":"...","description":"...","difficulty":"MEDIUM","xp":120},
-            {"title":"...","description":"...","difficulty":"HARD","xp":250},
-            {"title":"...","description":"...","difficulty":"HARD","xp":250}
-          ]
+          "title": "...",
+          "description": "...",
+          "difficulty": "EASY",
+          "xp": 50,
+          "day_number": 1
         }
+      ]
+    }
 
-        Missions must reference the user's actual answers — make them specific to this person.
-        """;
+    The array must have between 5 and 10 items.
+    day_number must start at 1 and be sequential with no gaps (rest days
+    still get a mission, just an EASY one).
+    """;
 
     // Called once when user submits their goal — gets the first question
     public ChatResDTO startInterview(Goal goal) {

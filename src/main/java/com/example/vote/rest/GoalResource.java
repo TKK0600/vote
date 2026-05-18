@@ -19,6 +19,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -29,6 +30,7 @@ public class GoalResource {
 
     private final GoalRepository goalRepository;
     private final GoalInterviewService interviewService;
+    private final MissionRepository missionRepository;
 
     // Step 1: Create goal → get first question back immediately
     @PostMapping
@@ -72,9 +74,7 @@ public class GoalResource {
 
     // Get all missions for a goal
     @GetMapping("/{id}/missions")
-    public ResponseEntity<List<MissionResDTO>> getMissions(
-            @PathVariable Long id,
-            MissionRepository missionRepository) {
+    public ResponseEntity<List<MissionResDTO>> getMissions(@PathVariable Long id) {
 
         List<MissionResDTO> missions = missionRepository
                 .findByGoalId(id)
@@ -85,4 +85,22 @@ public class GoalResource {
 
         return ResponseEntity.ok(missions);
     }
+
+    @GetMapping("list")
+    public ResponseEntity<List<Map<String, Object>>> listGoals() {
+        List<Map<String, Object>> goals = goalRepository.findActiveByUserId(RequestUserUtil.getCurrentUserId())
+                .stream()
+                .map(g -> {
+                    Map<String, Object> goalMap = new HashMap<>();
+                    goalMap.put("id", g.getId());
+                    goalMap.put("title", g.getTitle());
+                    goalMap.put("category", g.getCategory());
+                    goalMap.put("status", g.getStatus());
+                    return goalMap;
+                })
+                .toList();
+        return ResponseEntity.ok(goals);
+    }
+
+
 }

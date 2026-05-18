@@ -1,5 +1,6 @@
 package com.example.vote.service.auth;
 
+import com.example.vote.exception.OAuth2AuthenticationException;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
@@ -15,66 +16,69 @@ import java.util.Map;
 public class GoogleTokenVerifierService {
 
     private static final String GOOGLE_ISSUER = "https://accounts.google.com";
+    private static final String GOOGLE_CERTS_URL = "https://www.googleapis.com/oauth2/v3/certs";
 
     private final JwtDecoder googleJwtDecoder;
+    private final String googleClientId;
 
-    @Value("${google.oauth.client-id:}")
-    private String googleClientId;
-
-    public GoogleTokenVerifierService() {
-        this.googleJwtDecoder = NimbusJwtDecoder
-                .withJwkSetUri("https://www.googleapis.com/oauth2/v3/certs")
-                .build();
+    public GoogleTokenVerifierService(@Value("${google.oauth.client-id:}") String googleClientId) {
+        this.googleClientId = googleClientId;
+        this.googleJwtDecoder = NimbusJwtDecoder.withJwkSetUri(GOOGLE_CERTS_URL).build();
     }
 
     public GoogleUserInfo verify(String idToken) {
         if (!StringUtils.hasText(idToken)) {
-            throw new IllegalArgumentException("Google id token is required");
+            throw new OAuth2AuthenticationException("Google ID token is required");
         }
 
         if (!StringUtils.hasText(googleClientId)) {
-            throw new IllegalStateException("Google OAuth client id is not configured");
+            throw new OAuth2AuthenticationException("Google OAuth client ID is not configured");
         }
 
-        Jwt jwt;
-        try {
-            jwt = googleJwtDecoder.decode(idToken);
-        } catch (JwtException e) {
-            throw new IllegalArgumentException("Invalid Google id token");
-        }
-
-        validateIssuer(jwt.getIssuer() == null ? null : jwt.getIssuer().toString());
-        validateAudience(jwt.getAudience());
-        validateEmailVerified(jwt.getClaims());
+        Jwt jwt = decodeToken(idToken);
+        validateTokenClaims(jwt);
 
         String email = jwt.getClaimAsString("email");
         if (!StringUtils.hasText(email)) {
-            throw new IllegalArgumentException("Google token does not contain email");
+            throw new OAuth2AuthenticationException("Google token does not contain email");
         }
 
         return new GoogleUserInfo(jwt.getSubject(), email, jwt.getClaimAsString("name"));
     }
 
+    private Jwt decodeToken(String idToken) {
+        try {
+            return googleJwtDecoder.decode(idToken);
+        } catch (JwtException e) {
+            throw new OAuth2AuthenticationException("Invalid Google ID token");
+        }
+    }
+
+    private void validateTokenClaims(Jwt jwt) {
+        validateIssuer(jwt.getIssuer() != null ? jwt.getIssuer().toString() : null);
+        validateAudience(jwt.getAudience());
+        validateEmailVerified(jwt.getClaims());
+    }
+
     private void validateIssuer(String issuer) {
-        if (!StringUtils.hasText(issuer) ||
-                !(GOOGLE_ISSUER.equals(issuer) || "accounts.google.com".equals(issuer))) {
-            throw new IllegalArgumentException("Invalid Google token issuer");
+        if (!StringUtils.hasText(issuer)
+                || !(GOOGLE_ISSUER.equals(issuer) || "accounts.google.com".equals(issuer))) {
+            throw new OAuth2AuthenticationException("Invalid Google token issuer");
         }
     }
 
     private void validateAudience(List<String> audience) {
         if (audience == null || !audience.contains(googleClientId)) {
-            throw new IllegalArgumentException("Google token audience does not match configured client id");
+            throw new OAuth2AuthenticationException("Google token audience does not match configured client ID");
         }
     }
 
     private void validateEmailVerified(Map<String, Object> claims) {
         Object emailVerified = claims.get("email_verified");
         if (!(emailVerified instanceof Boolean verified) || !verified) {
-            throw new IllegalArgumentException("Google account email is not verified");
+            throw new OAuth2AuthenticationException("Google account email is not verified");
         }
     }
 
-    public record GoogleUserInfo(String providerUserId, String email, String name) {
-    }
+    public record GoogleUserInfo(String providerUserId, String email, String name) {}
 }

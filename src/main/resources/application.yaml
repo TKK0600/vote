@@ -15,7 +15,7 @@ spring:
   jpa:
     database-platform: org.hibernate.dialect.PostgreSQLDialect
     hibernate:
-      ddl-auto: validate
+      ddl-auto: update
     show-sql: true
   flyway:
     enabled: true
@@ -35,14 +35,21 @@ spring.datasource:
   password: P@ssw0rd
   driver-class-name: org.postgresql.Driver
 
+app:
+  cors:
+    allowed-origins: http://localhost:5173
+
 token:
   jwt:
-    secret: 5910e844-0dc4-11eb-adc1-0242ac120002
-  expiry: 5 #5 minutes
+    secret: ${JWT_SECRET:5910e844-0dc4-11eb-adc1-0242ac120002}
+  expiry: 5 #5 minutes (verification token)
+  refresh:
+    expiry-days: 7
 
 frontend:
-  url: http://localhost:8080
+  url: ${FRONTEND_URL:http://localhost:8080}
 
 google:
   oauth:
-    client-id: 682908466873-llntklr9v5ej7hl6t89nbvftu3lbg32j.apps.googleusercontent.com
+    client-id: ${GOOGLE_CLIENT_ID:682908466873-llntklr9v5ej7hl6t89nbvftu3lbg32j.apps.googleusercontent.com}
+    client-secret: ${GOOGLE_CLIENT_SECRET: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}
