@@ -4,5 +4,6 @@ import jakarta.validation.constraints.NotBlank;
 
 public record CreateGoalReqDTO(
         @NotBlank String title,
-        String category
+        String category,
+        int duration
 ) {}

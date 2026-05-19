@@ -44,4 +44,10 @@ public class Goal {
     @OneToMany(mappedBy = "goal", cascade = CascadeType.ALL, orphanRemoval = true)
     @OrderBy("seqOrder ASC")
     private List<GoalConversation> conversations = new ArrayList<>();
+
+    @Column(name = "end_date")
+    private LocalDateTime endDate;
+
+    @Column(name = "week_required")
+    private int week;
 }

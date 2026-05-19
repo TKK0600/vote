@@ -3,11 +3,13 @@ package com.example.vote.rest;
 import com.example.vote.dto.goal.ChatReqDTO;
 import com.example.vote.dto.goal.ChatResDTO;
 import com.example.vote.dto.goal.CreateGoalReqDTO;
+import com.example.vote.dto.goal.GoalReqDTO;
 import com.example.vote.dto.goal.MissionResDTO;
 import com.example.vote.modal.quest.Goal;
 import com.example.vote.repository.goal.GoalRepository;
 import com.example.vote.repository.goal.MissionRepository;
 import com.example.vote.service.goal.GoalInterviewService;
+import com.example.vote.service.goal.GoalService;
 import com.example.vote.util.RequestUserUtil;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -15,10 +17,12 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.time.LocalDate;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -30,6 +34,7 @@ public class GoalResource {
 
     private final GoalRepository goalRepository;
     private final GoalInterviewService interviewService;
+    private final GoalService goalService;
     private final MissionRepository missionRepository;
 
     // Step 1: Create goal → get first question back immediately
@@ -37,11 +42,11 @@ public class GoalResource {
     public ResponseEntity<Map<String, Object>> createGoal(
             @RequestBody @Valid CreateGoalReqDTO request) {
 
-        // TODO: replace hardcoded 1L with real auth userId
         Goal goal = new Goal();
         goal.setUserId(RequestUserUtil.getCurrentUserId());
         goal.setTitle(request.title());
         goal.setCategory(request.category());
+        goal.setEndDate(LocalDate.now().plusDays(request.duration()).atStartOfDay());
         goalRepository.save(goal);
 
         // Kick off the interview immediately
@@ -79,7 +84,20 @@ public class GoalResource {
         List<MissionResDTO> missions = missionRepository
                 .findByGoalId(id)
                 .stream()
-                .map(m -> new MissionResDTO(m.getId(), m.getTitle(),
+                .map(m -> new MissionResDTO(m.getId(), m.getGoal().getId(), m.getTitle(),
+                        m.getDescription(), m.getDifficulty().name(), m.getXpReward()))
+                .toList();
+
+        return ResponseEntity.ok(missions);
+    }
+
+    @GetMapping("/mission/list")
+    public ResponseEntity<List<MissionResDTO>> getMissionList() {
+        Long currentUserId = RequestUserUtil.getCurrentUserId();
+        List<MissionResDTO> missions = missionRepository
+                .findByUserId(currentUserId)
+                .stream()
+                .map(m -> new MissionResDTO(m.getId(), m.getGoal().getId(), m.getTitle(),
                         m.getDescription(), m.getDifficulty().name(), m.getXpReward()))
                 .toList();
 
@@ -96,11 +114,20 @@ public class GoalResource {
                     goalMap.put("title", g.getTitle());
                     goalMap.put("category", g.getCategory());
                     goalMap.put("status", g.getStatus());
+                    goalMap.put("createdAt", g.getCreatedAt());
                     return goalMap;
                 })
                 .toList();
         return ResponseEntity.ok(goals);
     }
 
+    @PutMapping("/update")
+    public ResponseEntity<?> updateGoal(@RequestBody GoalReqDTO reqDTO) {
+        return goalService.updateGoalStatus(reqDTO);
+    }
 
+    @PutMapping("/{id}/mission/update")
+    public ResponseEntity<?> updateMission(@PathVariable Long id, @RequestBody GoalReqDTO reqDTO) {
+        return goalService.updateMissionStatus(id, reqDTO);
+    }
 }

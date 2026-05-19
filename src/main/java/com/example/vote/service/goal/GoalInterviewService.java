@@ -260,7 +260,9 @@ public class GoalInterviewService {
                 missionRepository.save(mission);
 
                 result.add(new MissionResDTO(
-                        mission.getId(), mission.getTitle(),
+                        mission.getId(),
+                        mission.getGoal().getId(),
+                        mission.getTitle(),
                         mission.getDescription(),
                         mission.getDifficulty().name(),
                         mission.getXpReward()

@@ -34,8 +34,9 @@ public class Mission {
     @Column(columnDefinition = "TEXT")
     private String description;
 
-    @Column(name = "duration")
-    private LocalDateTime duration;
+    private int week;
+
+    private int day;
 
     @Enumerated(EnumType.STRING)
     private Difficulty difficulty;
