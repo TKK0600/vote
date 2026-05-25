@@ -13,6 +13,7 @@ import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import lombok.Data;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 // Mission.java
@@ -34,9 +35,11 @@ public class Mission {
     @Column(columnDefinition = "TEXT")
     private String description;
 
-    private int week;
+    @Column(name = "week_number", nullable = false)
+    private int weekNumber;
 
-    private int day;
+    @Column(name = "target_date", nullable = false)
+    private LocalDate targetDate;
 
     @Enumerated(EnumType.STRING)
     private Difficulty difficulty;

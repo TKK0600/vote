@@ -45,9 +45,12 @@ public class Goal {
     @OrderBy("seqOrder ASC")
     private List<GoalConversation> conversations = new ArrayList<>();
 
-    @Column(name = "end_date")
-    private LocalDateTime endDate;
+    @Column(name = "week_required", nullable = false)
+    private int weekRequired;
 
-    @Column(name = "week_required")
-    private int week;
+    @Column(name = "current_week", nullable = false)
+    private int currentWeek = 1;
+
+    @Column(name = "current_week_end_date")
+    private LocalDateTime currentWeekEndDate;
 }

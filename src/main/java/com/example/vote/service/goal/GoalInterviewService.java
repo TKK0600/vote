@@ -1,15 +1,20 @@
 package com.example.vote.service.goal;
 
+import com.example.vote.constant.CommonConst;
 import com.example.vote.dto.goal.ChatResDTO;
+import com.example.vote.dto.goal.GoalResDTO;
 import com.example.vote.dto.goal.MissionResDTO;
+import com.example.vote.exception.BusinessException;
 import com.example.vote.modal.quest.Difficulty;
 import com.example.vote.modal.quest.Goal;
 import com.example.vote.modal.quest.GoalConversation;
 import com.example.vote.modal.quest.GoalStatus;
 import com.example.vote.modal.quest.Mission;
+import com.example.vote.modal.quest.MissionStatus;
 import com.example.vote.repository.goal.GoalConversationRepository;
 import com.example.vote.repository.goal.GoalRepository;
 import com.example.vote.repository.goal.MissionRepository;
+import com.example.vote.util.PromptLoader;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.persistence.EntityNotFoundException;
@@ -21,8 +26,12 @@ import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
@@ -34,97 +43,13 @@ public class GoalInterviewService {
     private final MissionRepository missionRepository;
     private final ObjectMapper objectMapper;
 
-    private static final int MAX_QUESTIONS = 4;
+    private static final String INTERVIEW_SYSTEM_PROMPT = PromptLoader.load("prompt/goal_interview_prompt.md");
 
-    private static final String INTERVIEW_SYSTEM_PROMPT = """
-    You are a goal coach helping personalise daily missions for a user.
-    The user's goal is: "%s"
-
-    You must ask EXACTLY %d short follow-up questions, one at a time.
-    Cover: daily schedule and free time windows, current habits or baseline
-    fitness/skill level, location and available resources, and any constraints
-    (budget, injury, diet restrictions, work hours).
-
-    Make every question specific to this goal and this person.
-    Be warm, conversational, and brief.
-
-    RULES:
-    - Ask ONE question per response. Keep it under 2 sentences.
-    - After receiving the answer to question %d, respond with ONLY this JSON
-      and nothing else:
-      {"done": true}
-    - Never add explanation after that JSON.
-    """;
-
-    private static final String GENERATION_SYSTEM_PROMPT = """
-    You are a daily mission planner. Based on the conversation history about
-    the user's goal "%s", generate a personalised 5–10 day mission plan.
-
-    CORE RULE — DAILY GRANULARITY:
-    Every mission = exactly ONE concrete action the user completes in a single
-    day. Never write a mission that spans multiple days or says "this week".
-    If an activity naturally spans several days (e.g. "work out 6 hours total
-    this week"), split it into individual daily missions (Day 1: 1 hr, Day 2:
-    rest, Day 3: 1 hr, etc.).
-
-    HOW TO DECIDE THE NUMBER OF MISSIONS (5–10):
-    - Short, high-frequency goals (daily exercise, daily diet changes): 7 missions
-      — one per day for a full week.
-    - Goals with natural rest days or lower frequency: include rest/reflection
-      days as lightweight missions (e.g. "Rest day: stretch for 10 minutes and
-      log how you feel"). Total should still reach 5–7.
-    - Complex goals with multiple distinct habit tracks: up to 10 missions to
-      cover different dimensions across the week.
-
-    MISSION QUALITY RULES:
-    1. Be specific to the user's answers — reference their food, schedule,
-       location, or constraints directly.
-    2. Each mission must be completable in one sitting or one defined time
-       window (e.g. "this morning", "after dinner", "at lunch").
-    3. Title: short action phrase (≤8 words), starts with a verb.
-    4. Description: 2–3 sentences. What to do, when to do it, and why it
-       helps. No vague advice.
-    5. Assign a "day_number" (1 = today, 2 = tomorrow, etc.) so the frontend
-       can display them on a timeline.
-    6. Difficulty and XP must reflect actual daily effort:
-       - EASY  (+50 XP):  habit-level, ≤30 min, low willpower cost
-       - MEDIUM (+120 XP): requires planning or moderate effort, 30–60 min
-       - HARD  (+250 XP): high effort, discipline, or discomfort required, 60+ min
-
-    BAD MISSION EXAMPLES (never generate these):
-    ✗ "Complete 6 hours of workouts this week"   ← spans multiple days
-    ✗ "Avoid fried food for 7 days"              ← no single-day action
-    ✗ "Exercise 3 times this week"               ← vague, no day assigned
-    ✗ "Work on your goal every day"              ← not specific
-
-    GOOD MISSION EXAMPLES:
-    ✓ Day 1 — "Walk 20 Minutes After Dinner Tonight" (EASY)
-    ✓ Day 2 — "Swap Breakfast for Two Boiled Eggs" (EASY)
-    ✓ Day 3 — "Complete a 45-Minute Bodyweight Session" (MEDIUM)
-    ✓ Day 4 — "Rest Day: Stretch for 15 Minutes Before Bed" (EASY)
-    ✓ Day 5 — "Cook One High-Protein Meal at Home" (MEDIUM)
-
-    Return ONLY valid JSON — no markdown, no explanation:
-    {
-      "missions": [
-        {
-          "title": "...",
-          "description": "...",
-          "difficulty": "EASY",
-          "xp": 50,
-          "day_number": 1
-        }
-      ]
-    }
-
-    The array must have between 5 and 10 items.
-    day_number must start at 1 and be sequential with no gaps (rest days
-    still get a mission, just an EASY one).
-    """;
+    private static final String GENERATION_SYSTEM_PROMPT = PromptLoader.load("prompt/goal_generation_prompt.md");
 
     // Called once when user submits their goal — gets the first question
     public ChatResDTO startInterview(Goal goal) {
-        String systemPrompt = buildInterviewPrompt(goal.getTitle());
+        String systemPrompt = buildInterviewPrompt(goal.getTitle(), goal.getCategory());
 
         // No history yet — just ask for the first question
         String firstQuestion = chatClient.prompt()
@@ -136,7 +61,7 @@ public class GoalInterviewService {
         // Save the first assistant message
         saveConversationTurn(goal, "assistant", firstQuestion, 0);
 
-        return new ChatResDTO(firstQuestion, false, 1, MAX_QUESTIONS);
+        return new ChatResDTO(firstQuestion, false, 1, CommonConst.MAX_INTERVIEW_QUESTIONS);
     }
 
     // Called each time user submits an answer
@@ -149,35 +74,53 @@ public class GoalInterviewService {
 
         int nextSeq = history.size();
 
-        // Save the user's answer first
+        // Save the user's answer
         saveConversationTurn(goal, "user", userAnswer, nextSeq);
 
-        // Count how many user turns exist (= how many questions answered so far)
-        long answeredCount = history.stream()
-                .filter(c -> "user".equals(c.getRole()))
-                .count() + 1; // +1 for the answer we just saved
+        // Count total questions asked so far (assistant turns)
+        long questionsAsked = history.stream()
+                .filter(c -> "assistant".equals(c.getRole()))
+                .count();
 
-        // If all questions answered, signal done — don't ask another question
-        if (answeredCount >= MAX_QUESTIONS) {
+        // Hard ceiling — force done if max reached
+        if (questionsAsked >= CommonConst.MAX_INTERVIEW_QUESTIONS) {
             return new ChatResDTO(null, true,
-                    (int) answeredCount, MAX_QUESTIONS);
+                    (int) questionsAsked, CommonConst.MAX_INTERVIEW_QUESTIONS);
         }
 
-        // Build message list for Spring AI from DB history
-        List<Message> messages = buildMessageHistory(history, userAnswer);
-        String systemPrompt = buildInterviewPrompt(goal.getTitle());
+        // Build full history including the answer just saved
+        List<GoalConversation> updatedHistory = conversationRepository
+                .findByGoalIdOrderBySeqOrderAsc(goalId);
 
-        String nextQuestion = chatClient.prompt()
+        List<Message> messages = buildMessageHistory(updatedHistory, null);
+        String systemPrompt = buildInterviewPrompt(goal.getTitle(), goal.getCategory());
+
+        String aiResponse = chatClient.prompt()
                 .system(systemPrompt)
                 .messages(messages)
                 .call()
                 .content();
 
-        // Save AI's next question
-        saveConversationTurn(goal, "assistant", nextQuestion, nextSeq + 1);
+        // Check if AI decided it has enough context
+        String trimmed = aiResponse.trim();
+        if (trimmed.startsWith("{") && trimmed.contains("\"done\"")) {
+            try {
+                JsonNode node = objectMapper.readTree(trimmed);
+                if (node.has("done") && node.get("done").asBoolean()) {
+                    return new ChatResDTO(null, true,
+                            (int) questionsAsked, CommonConst.MAX_INTERVIEW_QUESTIONS);
+                }
+            } catch (Exception ignored) {
+                // Not valid JSON — treat as a normal question
+            }
+        }
 
-        int questionNumber = (int) answeredCount + 1;
-        return new ChatResDTO(nextQuestion, false, questionNumber, MAX_QUESTIONS);
+        // Normal question — save and return
+        saveConversationTurn(goal, "assistant", aiResponse, nextSeq + 1);
+
+        int currentQuestion = (int) questionsAsked + 1;
+        return new ChatResDTO(aiResponse, false,
+                currentQuestion, CommonConst.MAX_INTERVIEW_QUESTIONS);
     }
 
     // Called after interviewDone = true to generate missions
@@ -206,9 +149,12 @@ public class GoalInterviewService {
 
     // --- Private helpers ---
 
-    private String buildInterviewPrompt(String goalTitle) {
+    private String buildInterviewPrompt(String goalTitle, String category) {
         return String.format(INTERVIEW_SYSTEM_PROMPT,
-                goalTitle, MAX_QUESTIONS, MAX_QUESTIONS);
+                goalTitle,
+                category,
+                CommonConst.MAX_INTERVIEW_QUESTIONS,
+                CommonConst.MAX_INTERVIEW_QUESTIONS);
     }
 
     private List<Message> buildMessageHistory(
@@ -248,34 +194,165 @@ public class GoalInterviewService {
             JsonNode root = objectMapper.readTree(cleaned);
             JsonNode missionsNode = root.get("missions");
 
-            List<MissionResDTO> result = new ArrayList<>();
+            if (missionsNode == null || !missionsNode.isArray()) {
+                throw new RuntimeException("AI returned invalid missions format. Raw: " + rawJson);
+            }
+
+            int total = missionsNode.size();
+            if (total < CommonConst.MIN_MISSIONS_PER_WEEK || total > CommonConst.MAX_MISSIONS_PER_WEEK) {
+                throw new RuntimeException(
+                    "AI returned " + total + " missions. Expected between "
+                    + CommonConst.MIN_MISSIONS_PER_WEEK + " and "
+                    + CommonConst.MAX_MISSIONS_PER_WEEK + ". Raw: " + rawJson);
+            }
+
+            // Validate per-day cap
+            Map<Integer, Long> perDay = new HashMap<>();
             for (JsonNode m : missionsNode) {
+                int day = m.get("day").asInt();
+                perDay.merge(day, 1L, Long::sum);
+            }
+            for (Map.Entry<Integer, Long> entry : perDay.entrySet()) {
+                if (entry.getValue() > CommonConst.MAX_MISSIONS_PER_DAY) {
+                    throw new RuntimeException(
+                        "Day " + entry.getKey() + " has " + entry.getValue()
+                        + " missions, exceeds max of " + CommonConst.MAX_MISSIONS_PER_DAY);
+                }
+            }
+
+            // Validate all 7 days are covered
+            if (perDay.size() < 7) {
+                throw new RuntimeException(
+                    "Not all 7 days have at least one mission. Days present: " + perDay.keySet());
+            }
+
+            LocalDate weekStart = LocalDate.now();
+            List<MissionResDTO> result = new ArrayList<>();
+
+            for (JsonNode m : missionsNode) {
+                int day = m.get("day").asInt();  // 1–7
+
                 Mission mission = new Mission();
                 mission.setGoal(goal);
                 mission.setTitle(m.get("title").asText());
                 mission.setDescription(m.get("description").asText());
-                mission.setDifficulty(
-                        Difficulty.valueOf(m.get("difficulty").asText()));
+                mission.setDifficulty(Difficulty.valueOf(m.get("difficulty").asText()));
                 mission.setXpReward(m.get("xp").asInt());
+                mission.setWeekNumber(goal.getCurrentWeek());           // always 1 on first generation
+                mission.setTargetDate(weekStart.plusDays(day - 1));     // day 1 = today, day 7 = today+6
+
                 missionRepository.save(mission);
 
                 result.add(new MissionResDTO(
-                        mission.getId(),
-                        mission.getGoal().getId(),
-                        mission.getTitle(),
-                        mission.getDescription(),
-                        mission.getDifficulty().name(),
-                        mission.getXpReward()
+                    mission.getId(),
+                    mission.getGoal().getId(),
+                    mission.getTitle(),
+                    mission.getDescription(),
+                    mission.getDifficulty().name(),
+                    mission.getXpReward(),
+                    mission.getWeekNumber(),
+                    mission.getTargetDate()
                 ));
             }
 
-            // Update goal status to ACTIVE now that missions exist
+            // Set week cycle expiry and activate goal
+            goal.setCurrentWeekEndDate(LocalDateTime.now().plusDays(7));
             goal.setStatus(GoalStatus.ACTIVE);
             goalRepository.save(goal);
 
             return result;
+
         } catch (Exception e) {
-            throw new RuntimeException("Failed to parse AI mission response", e);
+            throw new RuntimeException("Failed to parse AI mission response: " + e.getMessage(), e);
         }
+    }
+
+    public List<MissionResDTO> getMissions(Long goalId, Long userId) {
+        Goal goal = goalRepository.findById(goalId)
+            .orElseThrow(() -> new EntityNotFoundException("Goal not found"));
+        if (!goal.getUserId().equals(userId))
+            throw new BusinessException("Access denied");
+
+        return missionRepository.findByGoalIdOrderByTargetDate(goalId)
+            .stream()
+            .map(m -> new MissionResDTO(
+                m.getId(), m.getGoal().getId(), m.getTitle(), m.getDescription(),
+                m.getDifficulty().name(), m.getXpReward(),
+                m.getWeekNumber(), m.getTargetDate()))
+            .toList();
+    }
+
+    public List<MissionResDTO> getTodaysMissions(Long goalId, Long userId) {
+        Goal goal = goalRepository.findById(goalId)
+            .orElseThrow(() -> new EntityNotFoundException("Goal not found"));
+        if (!goal.getUserId().equals(userId))
+            throw new BusinessException("Access denied");
+
+        return missionRepository.findByGoalIdAndTargetDateAndStatus(goalId, LocalDate.now(), MissionStatus.ACTIVE)
+            .stream()
+            .map(this::toMissionResDTO)
+            .toList();
+    }
+
+    @Transactional
+    public MissionResDTO completeMission(Long missionId, Long userId) {
+        Mission mission = missionRepository.findById(missionId)
+            .orElseThrow(() -> new EntityNotFoundException("Mission not found"));
+
+        if (!mission.getGoal().getUserId().equals(userId))
+            throw new BusinessException("Access denied");
+
+        if (mission.getStatus() != MissionStatus.ACTIVE)
+            throw new BusinessException("Mission is not active");
+
+        mission.setStatus(MissionStatus.DONE);
+        missionRepository.save(mission);
+        return toMissionResDTO(mission);
+    }
+
+    @Transactional
+    public MissionResDTO skipMission(Long missionId, Long userId) {
+        Mission mission = missionRepository.findById(missionId)
+            .orElseThrow(() -> new EntityNotFoundException("Mission not found"));
+
+        if (!mission.getGoal().getUserId().equals(userId))
+            throw new BusinessException("Access denied");
+
+        if (mission.getStatus() != MissionStatus.ACTIVE)
+            throw new BusinessException("Mission is not active");
+
+        mission.setStatus(MissionStatus.SKIPPED);
+        missionRepository.save(mission);
+        return toMissionResDTO(mission);
+    }
+
+    @Transactional
+    public GoalResDTO completeGoal(Long goalId, Long userId) {
+        Goal goal = goalRepository.findById(goalId)
+            .orElseThrow(() -> new EntityNotFoundException("Goal not found"));
+
+        if (!goal.getUserId().equals(userId))
+            throw new BusinessException("Access denied");
+
+        if (goal.getStatus() != GoalStatus.ACTIVE)
+            throw new BusinessException("Only active goals can be marked complete");
+
+        goal.setStatus(GoalStatus.COMPLETED);
+        goalRepository.save(goal);
+        return toGoalResDTO(goal);
+    }
+
+    // --- Private helpers ---
+
+    private MissionResDTO toMissionResDTO(Mission m) {
+        return new MissionResDTO(
+            m.getId(), m.getGoal().getId(), m.getTitle(), m.getDescription(),
+            m.getDifficulty().name(), m.getXpReward(),
+            m.getWeekNumber(), m.getTargetDate());
+    }
+
+    private GoalResDTO toGoalResDTO(Goal g) {
+        return new GoalResDTO(
+            g.getId(), g.getTitle(), g.getStatus().name(), g.getCategory(), g.getCreatedAt());
     }
 }

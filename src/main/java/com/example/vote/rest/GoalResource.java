@@ -4,6 +4,7 @@ import com.example.vote.dto.goal.ChatReqDTO;
 import com.example.vote.dto.goal.ChatResDTO;
 import com.example.vote.dto.goal.CreateGoalReqDTO;
 import com.example.vote.dto.goal.GoalReqDTO;
+import com.example.vote.dto.goal.GoalResDTO;
 import com.example.vote.dto.goal.MissionResDTO;
 import com.example.vote.modal.quest.Goal;
 import com.example.vote.repository.goal.GoalRepository;
@@ -22,7 +23,6 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.time.LocalDate;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -37,6 +37,8 @@ public class GoalResource {
     private final GoalService goalService;
     private final MissionRepository missionRepository;
 
+
+    // ==============Create Goal and Mission==============================================================
     // Step 1: Create goal → get first question back immediately
     @PostMapping
     public ResponseEntity<Map<String, Object>> createGoal(
@@ -46,7 +48,7 @@ public class GoalResource {
         goal.setUserId(RequestUserUtil.getCurrentUserId());
         goal.setTitle(request.title());
         goal.setCategory(request.category());
-        goal.setEndDate(LocalDate.now().plusDays(request.duration()).atStartOfDay());
+        goal.setWeekRequired(request.weekRequired());
         goalRepository.save(goal);
 
         // Kick off the interview immediately
@@ -77,18 +79,21 @@ public class GoalResource {
         return ResponseEntity.ok(missions);
     }
 
+    // ==================================================================================================
+
+    // ======================Retrieve Goal and Mission======================
     // Get all missions for a goal
     @GetMapping("/{id}/missions")
     public ResponseEntity<List<MissionResDTO>> getMissions(@PathVariable Long id) {
+        Long userId = RequestUserUtil.getCurrentUserId();
+        return ResponseEntity.ok(interviewService.getMissions(id, userId));
+    }
 
-        List<MissionResDTO> missions = missionRepository
-                .findByGoalId(id)
-                .stream()
-                .map(m -> new MissionResDTO(m.getId(), m.getGoal().getId(), m.getTitle(),
-                        m.getDescription(), m.getDifficulty().name(), m.getXpReward()))
-                .toList();
-
-        return ResponseEntity.ok(missions);
+    // Get today's missions for a goal (can be multiple)
+    @GetMapping("/{id}/missions/today")
+    public ResponseEntity<List<MissionResDTO>> getTodaysMissions(@PathVariable Long id) {
+        Long userId = RequestUserUtil.getCurrentUserId();
+        return ResponseEntity.ok(interviewService.getTodaysMissions(id, userId));
     }
 
     @GetMapping("/mission/list")
@@ -98,12 +103,12 @@ public class GoalResource {
                 .findByUserId(currentUserId)
                 .stream()
                 .map(m -> new MissionResDTO(m.getId(), m.getGoal().getId(), m.getTitle(),
-                        m.getDescription(), m.getDifficulty().name(), m.getXpReward()))
+                        m.getDescription(), m.getDifficulty().name(), m.getXpReward(),
+                        m.getWeekNumber(), m.getTargetDate()))
                 .toList();
 
         return ResponseEntity.ok(missions);
     }
-
     @GetMapping("list")
     public ResponseEntity<List<Map<String, Object>>> listGoals() {
         List<Map<String, Object>> goals = goalRepository.findActiveByUserId(RequestUserUtil.getCurrentUserId())
@@ -119,6 +124,29 @@ public class GoalResource {
                 })
                 .toList();
         return ResponseEntity.ok(goals);
+    }
+    //========================================================================
+
+    // =============================Update Goal and Mission==============================
+    // Mark a mission as DONE
+    @PostMapping("/missions/{id}/complete")
+    public ResponseEntity<MissionResDTO> completeMission(@PathVariable Long id) {
+        Long userId = RequestUserUtil.getCurrentUserId();
+        return ResponseEntity.ok(interviewService.completeMission(id, userId));
+    }
+
+    // Mark a mission as SKIPPED manually
+    @PostMapping("/missions/{id}/skip")
+    public ResponseEntity<MissionResDTO> skipMission(@PathVariable Long id) {
+        Long userId = RequestUserUtil.getCurrentUserId();
+        return ResponseEntity.ok(interviewService.skipMission(id, userId));
+    }
+
+    // Mark goal complete (ACTIVE → COMPLETED only)
+    @PostMapping("/{id}/complete")
+    public ResponseEntity<GoalResDTO> completeGoal(@PathVariable Long id) {
+        Long userId = RequestUserUtil.getCurrentUserId();
+        return ResponseEntity.ok(interviewService.completeGoal(id, userId));
     }
 
     @PutMapping("/update")
