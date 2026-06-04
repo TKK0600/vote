@@ -67,7 +67,6 @@ SPIRITUAL
 
 # Universal Questions (ask for any category if not already clear)
 - Daily schedule and free time windows
-- Biggest obstacle or concern about achieving this goal
 
 # Conversation Rules
 

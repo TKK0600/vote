@@ -103,10 +103,10 @@ public class GoalInterviewService {
 
         // Check if AI decided it has enough context
         String trimmed = aiResponse.trim();
-        if (trimmed.startsWith("{") && trimmed.contains("\"done\"")) {
+        if (trimmed.startsWith("{") && trimmed.contains("\"interviewDone\"")) {
             try {
                 JsonNode node = objectMapper.readTree(trimmed);
-                if (node.has("done") && node.get("done").asBoolean()) {
+                if (node.has("interviewDone") && node.get("interviewDone").asBoolean()) {
                     return new ChatResDTO(null, true,
                             (int) questionsAsked, CommonConst.MAX_INTERVIEW_QUESTIONS);
                 }
@@ -240,6 +240,7 @@ public class GoalInterviewService {
                 mission.setXpReward(m.get("xp").asInt());
                 mission.setWeekNumber(goal.getCurrentWeek());           // always 1 on first generation
                 mission.setTargetDate(weekStart.plusDays(day - 1));     // day 1 = today, day 7 = today+6
+                mission.setStatus(MissionStatus.ACTIVE);
 
                 missionRepository.save(mission);
 
@@ -251,7 +252,8 @@ public class GoalInterviewService {
                     mission.getDifficulty().name(),
                     mission.getXpReward(),
                     mission.getWeekNumber(),
-                    mission.getTargetDate()
+                    mission.getTargetDate(),
+                    mission.getStatus()
                 ));
             }
 
@@ -278,7 +280,7 @@ public class GoalInterviewService {
             .map(m -> new MissionResDTO(
                 m.getId(), m.getGoal().getId(), m.getTitle(), m.getDescription(),
                 m.getDifficulty().name(), m.getXpReward(),
-                m.getWeekNumber(), m.getTargetDate()))
+                m.getWeekNumber(), m.getTargetDate(), m.getStatus()))
             .toList();
     }
 
@@ -348,7 +350,7 @@ public class GoalInterviewService {
         return new MissionResDTO(
             m.getId(), m.getGoal().getId(), m.getTitle(), m.getDescription(),
             m.getDifficulty().name(), m.getXpReward(),
-            m.getWeekNumber(), m.getTargetDate());
+            m.getWeekNumber(), m.getTargetDate(), m.getStatus());
     }
 
     private GoalResDTO toGoalResDTO(Goal g) {

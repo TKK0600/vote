@@ -1,6 +1,7 @@
 package com.example.vote.dto.goal;
 
 import com.example.vote.modal.quest.Goal;
+import com.example.vote.modal.quest.MissionStatus;
 
 import java.time.LocalDate;
 
@@ -12,5 +13,6 @@ public record MissionResDTO(
         String difficulty,
         int xpReward,
         int weekNumber,
-        LocalDate targetDate
+        LocalDate targetDate,
+        MissionStatus status
 ) {}

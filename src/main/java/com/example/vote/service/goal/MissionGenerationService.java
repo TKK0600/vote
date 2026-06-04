@@ -148,6 +148,7 @@ public class MissionGenerationService {
                 mission.setXpReward(m.get("xp").asInt());
                 mission.setWeekNumber(weekNumber);
                 mission.setTargetDate(weekStart.plusDays(day - 1));
+                mission.setStatus(MissionStatus.ACTIVE);
 
                 missionRepository.save(mission);
 
@@ -155,7 +156,7 @@ public class MissionGenerationService {
                     mission.getId(), mission.getGoal().getId(),
                     mission.getTitle(), mission.getDescription(),
                     mission.getDifficulty().name(), mission.getXpReward(),
-                    mission.getWeekNumber(), mission.getTargetDate()
+                    mission.getWeekNumber(), mission.getTargetDate(), mission.getStatus()
                 ));
             }
             return result;

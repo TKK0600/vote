@@ -7,6 +7,7 @@ import com.example.vote.dto.goal.GoalReqDTO;
 import com.example.vote.dto.goal.GoalResDTO;
 import com.example.vote.dto.goal.MissionResDTO;
 import com.example.vote.modal.quest.Goal;
+import com.example.vote.modal.quest.GoalStatus;
 import com.example.vote.repository.goal.GoalRepository;
 import com.example.vote.repository.goal.MissionRepository;
 import com.example.vote.service.goal.GoalInterviewService;
@@ -38,7 +39,8 @@ public class GoalResource {
     private final MissionRepository missionRepository;
 
 
-    // ==============Create Goal and Mission==============================================================
+    // ========================Create Goal and Mission========================
+
     // Step 1: Create goal → get first question back immediately
     @PostMapping
     public ResponseEntity<Map<String, Object>> createGoal(
@@ -79,9 +81,9 @@ public class GoalResource {
         return ResponseEntity.ok(missions);
     }
 
-    // ==================================================================================================
+    // =========================================================================
 
-    // ======================Retrieve Goal and Mission======================
+    // ========================Retrieve Goal and Mission========================
     // Get all missions for a goal
     @GetMapping("/{id}/missions")
     public ResponseEntity<List<MissionResDTO>> getMissions(@PathVariable Long id) {
@@ -104,7 +106,7 @@ public class GoalResource {
                 .stream()
                 .map(m -> new MissionResDTO(m.getId(), m.getGoal().getId(), m.getTitle(),
                         m.getDescription(), m.getDifficulty().name(), m.getXpReward(),
-                        m.getWeekNumber(), m.getTargetDate()))
+                        m.getWeekNumber(), m.getTargetDate(), m.getStatus()))
                 .toList();
 
         return ResponseEntity.ok(missions);
@@ -125,9 +127,50 @@ public class GoalResource {
                 .toList();
         return ResponseEntity.ok(goals);
     }
-    //========================================================================
 
-    // =============================Update Goal and Mission==============================
+    @GetMapping("{id}")
+    public ResponseEntity<List<Map<String, Object>>> getGoalDetail(@PathVariable Long id) {
+        List<Map<String, Object>> goals = goalRepository.findById(id)
+                .stream()
+                .map(g -> {
+                    Map<String, Object> goalMap = new HashMap<>();
+                    goalMap.put("id", g.getId());
+                    goalMap.put("title", g.getTitle());
+                    goalMap.put("category", g.getCategory());
+                    goalMap.put("status", g.getStatus());
+                    goalMap.put("currentWeek", g.getCurrentWeek());
+                    goalMap.put("weekRequired", g.getWeekRequired());
+                    goalMap.put("createdAt", g.getCreatedAt());
+                    return goalMap;
+                })
+                .toList();
+        return ResponseEntity.ok(goals);
+    }
+
+    @GetMapping("/history")
+    public ResponseEntity<List<Map<String, Object>>> getPassGoal() {
+        Long userId = RequestUserUtil.getCurrentUserId();
+        List<Map<String, Object>> goals = goalRepository.findByUserIdAndStatuses(userId, List.of(GoalStatus.FAILED, GoalStatus.COMPLETED, GoalStatus.ARCHIVED))
+                .stream()
+                .map(g -> {
+                    Map<String, Object> goalMap = new HashMap<>();
+                    goalMap.put("id", g.getId());
+                    goalMap.put("title", g.getTitle());
+                    goalMap.put("category", g.getCategory());
+                    goalMap.put("status", g.getStatus());
+                    goalMap.put("currentWeek", g.getCurrentWeek());
+                    goalMap.put("weekRequired", g.getWeekRequired());
+                    goalMap.put("createdAt", g.getCreatedAt());
+                    return goalMap;
+                })
+                .toList();
+        return ResponseEntity.ok(goals);
+    }
+
+
+    // =======================================================================
+
+    // ========================Update Goal and Mission========================
     // Mark a mission as DONE
     @PostMapping("/missions/{id}/complete")
     public ResponseEntity<MissionResDTO> completeMission(@PathVariable Long id) {

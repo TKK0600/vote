@@ -1,6 +1,8 @@
 package com.example.vote.repository.goal;
 
+import com.example.vote.dto.goal.GoalResDTO;
 import com.example.vote.modal.quest.Goal;
+import com.example.vote.modal.quest.GoalStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -21,4 +23,14 @@ public interface GoalRepository extends JpaRepository<Goal, Long> {
         AND g.currentWeekEndDate <= :now
         """)
     List<Goal> findGoalsDueForWeeklyGeneration(@Param("now") LocalDateTime now);
+
+    @Query("""
+    SELECT g
+    FROM Goal g
+    WHERE g.userId = :userId
+      AND g.status IN :statuses
+    """)
+    List<Goal> findByUserIdAndStatuses(
+            @Param("userId") Long userId,
+            @Param("statuses") List<GoalStatus> statuses);
 }
