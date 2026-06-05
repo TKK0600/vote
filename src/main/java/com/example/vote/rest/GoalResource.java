@@ -5,7 +5,9 @@ import com.example.vote.dto.goal.ChatResDTO;
 import com.example.vote.dto.goal.CreateGoalReqDTO;
 import com.example.vote.dto.goal.GoalReqDTO;
 import com.example.vote.dto.goal.GoalResDTO;
+import com.example.vote.dto.goal.MissionGenerationResDTO;
 import com.example.vote.dto.goal.MissionResDTO;
+import com.example.vote.dto.goal.UpdateGoalReqDTO;
 import com.example.vote.modal.quest.Goal;
 import com.example.vote.modal.quest.GoalStatus;
 import com.example.vote.repository.goal.GoalRepository;
@@ -74,11 +76,11 @@ public class GoalResource {
 
     // Step 3: Called when frontend sees interviewDone=true
     @PostMapping("/{id}/missions/generate")
-    public ResponseEntity<List<MissionResDTO>> generateMissions(
+    public ResponseEntity<MissionGenerationResDTO> generateMissions(
             @PathVariable Long id) {
 
-        List<MissionResDTO> missions = interviewService.generateMissions(id);
-        return ResponseEntity.ok(missions);
+        MissionGenerationResDTO result = interviewService.generateMissions(id);
+        return ResponseEntity.ok(result);
     }
 
     // =========================================================================
@@ -192,9 +194,15 @@ public class GoalResource {
         return ResponseEntity.ok(interviewService.completeGoal(id, userId));
     }
 
-    @PutMapping("/update")
-    public ResponseEntity<?> updateGoal(@RequestBody GoalReqDTO reqDTO) {
+    @PutMapping("/batch/update")
+    public ResponseEntity<?> batchUpdateGoal(@RequestBody GoalReqDTO reqDTO) {
         return goalService.updateGoalStatus(reqDTO);
+    }
+
+    @PutMapping("/update")
+    public ResponseEntity<GoalResDTO> updateGoal(@RequestBody @Valid UpdateGoalReqDTO request) {
+        Long userId = RequestUserUtil.getCurrentUserId();
+        return ResponseEntity.ok(interviewService.updateGoal(request, userId));
     }
 
     @PutMapping("/{id}/mission/update")

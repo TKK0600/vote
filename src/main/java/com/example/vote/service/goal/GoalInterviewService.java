@@ -3,7 +3,9 @@ package com.example.vote.service.goal;
 import com.example.vote.constant.CommonConst;
 import com.example.vote.dto.goal.ChatResDTO;
 import com.example.vote.dto.goal.GoalResDTO;
+import com.example.vote.dto.goal.MissionGenerationResDTO;
 import com.example.vote.dto.goal.MissionResDTO;
+import com.example.vote.dto.goal.UpdateGoalReqDTO;
 import com.example.vote.exception.BusinessException;
 import com.example.vote.modal.quest.Difficulty;
 import com.example.vote.modal.quest.Goal;
@@ -46,6 +48,8 @@ public class GoalInterviewService {
     private static final String INTERVIEW_SYSTEM_PROMPT = PromptLoader.load("prompt/goal_interview_prompt.md");
 
     private static final String GENERATION_SYSTEM_PROMPT = PromptLoader.load("prompt/goal_generation_prompt.md");
+
+    private static final String FEASIBILITY_SYSTEM_PROMPT = PromptLoader.load("prompt/goal_feasibility_prompt.md");
 
     // Called once when user submits their goal — gets the first question
     public ChatResDTO startInterview(Goal goal) {
@@ -125,12 +129,17 @@ public class GoalInterviewService {
 
     // Called after interviewDone = true to generate missions
     @Transactional
-    public List<MissionResDTO> generateMissions(Long goalId) {
+    public MissionGenerationResDTO generateMissions(Long goalId) {
         Goal goal = goalRepository.findById(goalId)
                 .orElseThrow(() -> new EntityNotFoundException("Goal not found"));
 
         List<GoalConversation> history = conversationRepository
                 .findByGoalIdOrderBySeqOrderAsc(goalId);
+
+        FeasibilityResult feasibility = evaluateFeasibility(goal, history);
+        if (!feasibility.achievable) {
+            return new MissionGenerationResDTO(false, feasibility.note, null);
+        }
 
         List<Message> messages = buildMessageHistory(history, null);
         String systemPrompt = String.format(GENERATION_SYSTEM_PROMPT, goal.getTitle());
@@ -144,7 +153,8 @@ public class GoalInterviewService {
                 .content();
 
         // Parse JSON and save missions to DB
-        return parseMissionsAndSave(rawJson, goal);
+        List<MissionResDTO> missions = parseMissionsAndSave(rawJson, goal);
+        return new MissionGenerationResDTO(true, null, missions);
     }
 
     // --- Private helpers ---
@@ -186,6 +196,34 @@ public class GoalInterviewService {
         turn.setContent(content);
         turn.setSeqOrder(seqOrder);
         conversationRepository.save(turn);
+    }
+
+    private record FeasibilityResult(boolean achievable, String note) {}
+
+    private FeasibilityResult evaluateFeasibility(Goal goal, List<GoalConversation> history) {
+        List<Message> messages = buildMessageHistory(history, null);
+        String systemPrompt = String.format(FEASIBILITY_SYSTEM_PROMPT, goal.getTitle(), goal.getWeekRequired());
+
+        String rawJson = chatClient.prompt()
+                .system(systemPrompt)
+                .messages(messages)
+                .user("Based on everything I told you, evaluate whether my goal is achievable within the allotted time.")
+                .call()
+                .content();
+
+        try {
+            JsonNode root = objectMapper.readTree(rawJson.trim());
+            if (root.has("achievable")) {
+                boolean achievable = root.get("achievable").asBoolean();
+                String note = root.has("note") && !root.get("note").isNull()
+                        ? root.get("note").asText() : null;
+                return new FeasibilityResult(achievable, note);
+            }
+        } catch (Exception ignored) {
+            // Malformed JSON — default to achievable so generation proceeds
+        }
+
+        return new FeasibilityResult(true, null);
     }
 
     private List<MissionResDTO> parseMissionsAndSave(String rawJson, Goal goal) {
@@ -340,6 +378,22 @@ public class GoalInterviewService {
             throw new BusinessException("Only active goals can be marked complete");
 
         goal.setStatus(GoalStatus.COMPLETED);
+        goalRepository.save(goal);
+        return toGoalResDTO(goal);
+    }
+
+    @Transactional
+    public GoalResDTO updateGoal(UpdateGoalReqDTO request, Long userId) {
+        Goal goal = goalRepository.findById(request.id())
+                .orElseThrow(() -> new EntityNotFoundException("Goal not found"));
+
+        if (!goal.getUserId().equals(userId))
+            throw new BusinessException("Access denied");
+
+        if (request.weekRequired() != null) {
+            goal.setWeekRequired(request.weekRequired());
+        }
+
         goalRepository.save(goal);
         return toGoalResDTO(goal);
     }

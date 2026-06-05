@@ -25,7 +25,7 @@ The user's goal: "%s"
 
 1. **Macro vs. Micro Timeline:** If the user's overall goal requires weeks or months to safely achieve (e.g., building running distance, heavy weightlifting, mastering a complex skill), DO NOT force them to complete the final goal by Day 7.
 2. **Week 1 Focus:** Treat this 7-day plan as **Week 1** or the *initial building phase* of their long-term goal. Focus on building a consistent routine, establishing baselines, and minor metric increments.
-3. **The 10% Progression Cap:** For physical training or high-effort cognitive tasks, never increase the volume, distance, or intensity by more than 10% to 15% from their starting baseline within this single week.
+3. **The 10%% Progression Cap:** For physical training or high-effort cognitive tasks, never increase the volume, distance, or intensity by more than 10%% to 15%% from their starting baseline within this single week.
 4. **Logical Rest:** Ensure heavy effort days are strictly followed by rest, active recovery, or light habit-building days. Never schedule high-intensity physical tasks on back-to-back days.
 
 # Title Rules
