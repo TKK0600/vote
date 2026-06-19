@@ -3,6 +3,7 @@ package com.example.vote.service.auth;
 import com.example.vote.dto.auth.AuthResponse;
 import com.example.vote.dto.auth.LoginReqDTO;
 import com.example.vote.dto.auth.UserRegisterReqDTO;
+import com.example.vote.dto.auth.VerificationStatusResDto;
 import com.example.vote.exception.EmailAlreadyExistsException;
 import com.example.vote.exception.OAuth2AuthenticationException;
 import com.example.vote.jwt.JwtUtil;
@@ -26,6 +27,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import java.time.LocalDateTime;
+import java.util.Optional;
 import java.util.UUID;
 
 @Slf4j
@@ -58,7 +60,26 @@ public class AuthenticationService {
         validatePassword(regDto.getPassword());
 
         User user = findOrCreateUserByEmail(regDto.getEmail());
-        ensureEmailProviderNotExists(user);
+
+        // Check if email provider already exists (re-registration attempt)
+        Optional<UserAuthProvider> existingProvider = userAuthProviderRepository
+                .findByUserIdAndProvider(user.getId(), PROVIDER_EMAIL);
+
+        if (existingProvider.isPresent()) {
+            UserAuthProvider provider = existingProvider.get();
+            if (provider.isEmailVerified()) {
+                // Already registered and verified → error
+                throw new EmailAlreadyExistsException("Email already registered with password login");
+            }
+            // Registered but not verified → update password and resend verification
+            provider.setPasswordHash(passwordEncoder.encode(regDto.getPassword()));
+            userAuthProviderRepository.save(provider);
+            sendVerificationEmail(user);
+            log.info("Re-sent verification email for unverified user re-registering: {}", user.getEmail());
+            return new UserRegisterResult(user.getId(), user.getEmail());
+        }
+
+        // No existing email provider → create new one
         createEmailAuthProvider(user, regDto.getPassword());
         sendVerificationEmail(user);
 
@@ -98,9 +119,56 @@ public class AuthenticationService {
         User user = userRepository.findByEmail(request.getEmail())
                 .orElseThrow(() -> new IllegalArgumentException("User record not found"));
 
+        // Ensure the user's email has been verified for email/password logins
+        Boolean emailVerified = validateEmailVerification(user.getId());
+        if (emailVerified == null || !emailVerified) {
+            sendVerificationEmail(user);
+            log.info("Sent verification email for unverified user attempting login: {}", user.getEmail());
+            throw new IllegalArgumentException("Account not activated. A verification link has been sent to your email.");
+        }
+
         updateLastLogin(user.getEmail());
 
         return generateAuthResponse(user);
+    }
+
+    @Transactional
+    public String resendVarificationLink(String email){
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new IllegalArgumentException("User not found"));
+
+        Boolean isEmailVerified = validateEmailVerification(user.getId());
+        if (Boolean.TRUE.equals(isEmailVerified)) {
+            throw new IllegalArgumentException("User already verified");
+        }
+
+        Optional<VerificationToken> activeToken = verificationTokenRepository.findActiveTokenByUserId(user.getId(), LocalDateTime.now());
+        if(activeToken.isPresent()){
+            // Extend the expiry date of the active token and resend the same token
+            VerificationToken token = activeToken.get();
+            token.setExpiryDate(LocalDateTime.now().plusMinutes(tokenExpiryMinutes));
+            verificationTokenRepository.save(token);
+
+            String verifyLink = frontendUrl + "/api/auth/register/verify?token=" + token.getToken();
+            mailService.sendEmail(
+                    user.getEmail(),
+                    "Email Verification",
+                    "Click the link to verify: " + verifyLink);
+
+            log.info("Extended expiry date and resent verification email for user: {}", user.getEmail());
+            return "Verification email sent successfully";
+        }
+
+        // No active token: remove any existing tokens and create/send a new one
+        verificationTokenRepository.deleteByUser(user);
+        sendVerificationEmail(user);
+
+        log.info("Created and sent new verification token for user: {}", user.getEmail());
+        return "Verification email sent successfully";
+    }
+
+    public Boolean validateEmailVerification(Long id){
+        return userAuthProviderRepository.findEmailVerified(id);
     }
 
     @Transactional
@@ -127,13 +195,6 @@ public class AuthenticationService {
         });
     }
 
-    private void ensureEmailProviderNotExists(User user) {
-        userAuthProviderRepository.findByUserIdAndProvider(user.getId(), PROVIDER_EMAIL)
-                .ifPresent(existing -> {
-                    throw new EmailAlreadyExistsException("Email already registered with password login");
-                });
-    }
-
     private void createEmailAuthProvider(User user, String rawPassword) {
         UserAuthProvider provider = new UserAuthProvider();
         provider.setUser(user);
@@ -146,12 +207,25 @@ public class AuthenticationService {
 
     private void sendVerificationEmail(User user) {
         VerificationToken token = createVerificationToken(user);
-        String verifyLink = frontendUrl + "/verify?token=" + token.getToken();
+        String verifyLink = frontendUrl + "/api/auth/register/verify?token=" + token.getToken();
 
         mailService.sendEmail(
                 user.getEmail(),
                 "Email Verification",
                 "Click the link to verify: " + verifyLink);
+    }
+
+    public VerificationStatusResDto checkVerification(String email){
+        UserAuthProvider userAuth = userAuthProviderRepository.findByProviderAndEmail(PROVIDER_EMAIL, email)
+                .orElseThrow(() -> new IllegalArgumentException("User record not found"));
+
+        if(userAuth.isEmailVerified()){
+            User user = userRepository.findByEmail(email)
+                    .orElseThrow(() -> new IllegalArgumentException("User not found"));
+            return new VerificationStatusResDto(true, generateAuthResponse(user), "Successful verify");
+        }
+
+        return new VerificationStatusResDto(false, null, "Email not verified");
     }
 
     private VerificationToken createVerificationToken(User user) {

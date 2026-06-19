@@ -18,4 +18,7 @@ public interface UserAuthProviderRepository extends JpaRepository<UserAuthProvid
 
     @Query("SELECT MAX(u.lastLogin) FROM UserAuthProvider u WHERE u.user.id = :userId")
     LocalDateTime findMaxLastLoginByUserId(@Param("userId") Long userId);
+
+    @Query("SELECT a.emailVerified FROM UserAuthProvider a WHERE a.user.id = :userId AND a.provider = 'email'")
+    Boolean findEmailVerified(@Param("userId") Long userId);
 }

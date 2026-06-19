@@ -3,7 +3,9 @@ package com.example.vote.rest.auth;
 import com.example.vote.constant.CommonConst;
 import com.example.vote.dto.auth.AuthResponse;
 import com.example.vote.dto.auth.LoginReqDTO;
+import com.example.vote.dto.auth.ResendEmailDto;
 import com.example.vote.dto.auth.UserRegisterReqDTO;
+import com.example.vote.dto.auth.VerificationStatusResDto;
 import com.example.vote.mapstruct.auth.UserMapStruct;
 import com.example.vote.service.auth.AuthenticationService;
 import com.example.vote.service.auth.AuthenticationService.UserRegisterResult;
@@ -55,6 +57,15 @@ public class AuthResource {
         return bo.toString();
     }
 
+    @PostMapping("/register/resend")
+    public String resendVerification(@RequestBody ResendEmailDto reqDto) {
+        String result = authService.resendVarificationLink(reqDto.getEmail());
+
+        BoUtil bo = BoUtil.getDefaultTrueBo();
+        bo.setMsg(result);
+        return bo.toString();
+    }
+
     @PostMapping("/refresh")
     public ResponseEntity<AuthResponse> refresh(@RequestBody RefreshTokenVo request) {
         AuthResponse response = refreshTokenService.refreshAccessToken(request.getRefreshToken());
@@ -84,5 +95,10 @@ public class AuthResource {
         BoUtil bo = BoUtil.getDefaultTrueBo();
         bo.setMsg("Logged out successfully");
         return bo.toString();
+    }
+
+    @PostMapping("/verified")
+    public ResponseEntity<VerificationStatusResDto> checkStatus(@RequestBody ResendEmailDto reqDto){
+        return ResponseEntity.ok(authService.checkVerification(reqDto.getEmail()));
     }
 }

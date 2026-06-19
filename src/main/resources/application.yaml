@@ -30,7 +30,9 @@ spring:
           temperature: 0.7
 
 spring.datasource:
-  url: jdbc:postgresql://localhost:5432/your_quest  #jdbc:mysql://localhost:3306/vote
+#  url: jdbc:postgresql://host.docker.internal:5432/your_quest  #jdbc:mysql://localhost:3306/vote
+  url: jdbc:postgresql://db.jxuhngkqdqheyqujkjfo.supabase.co:5432/postgres?user=postgres&password=SEW_epwP6tDVwCi
+
   username: postgres  #root
   password: P@ssw0rd
   driver-class-name: org.postgresql.Driver
