@@ -2,6 +2,7 @@ package com.example.vote.service.goal;
 
 import com.example.vote.constant.CommonConst;
 import com.example.vote.dto.goal.MissionResDTO;
+import com.example.vote.mapstruct.goal.GoalMapStruct;
 import com.example.vote.modal.quest.Difficulty;
 import com.example.vote.modal.quest.Goal;
 import com.example.vote.modal.quest.GoalConversation;
@@ -33,6 +34,7 @@ public class MissionGenerationService {
     private final MissionRepository missionRepository;
     private final GoalConversationRepository conversationRepository;
     private final ObjectMapper objectMapper;
+    private final GoalMapStruct goalMapStruct;
 
     private static final String GENERATION_SYSTEM_PROMPT =
         PromptLoader.load("prompt/goal_generation_prompt.md");
@@ -152,12 +154,7 @@ public class MissionGenerationService {
 
                 missionRepository.save(mission);
 
-                result.add(new MissionResDTO(
-                    mission.getId(), mission.getGoal().getId(),
-                    mission.getTitle(), mission.getDescription(),
-                    mission.getDifficulty().name(), mission.getXpReward(),
-                    mission.getWeekNumber(), mission.getTargetDate(), mission.getStatus()
-                ));
+                result.add(goalMapStruct.toMissionResDTO(mission));
             }
             return result;
 

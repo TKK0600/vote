@@ -5,6 +5,7 @@ import com.example.vote.dto.profile.ProfileStatusResDTO;
 import com.example.vote.dto.profile.UserProfileReqDTO;
 import com.example.vote.dto.profile.UserProfileResDTO;
 import com.example.vote.exception.BusinessException;
+import com.example.vote.mapstruct.profile.UserProfileMapStruct;
 import com.example.vote.modal.user.User;
 import com.example.vote.repository.user.UserRepository;
 import com.example.vote.util.PromptLoader;
@@ -25,26 +26,27 @@ public class UserProfileService {
 
     private final UserRepository userRepository;
     private final ChatClient chatClient;
+    private final UserProfileMapStruct userProfileMapStruct;
 
     public UserProfileResDTO getProfile(Long userId) {
         User user = findUserById(userId);
-        return toProfileResDTO(user);
+        return userProfileMapStruct.toResDTO(user);
     }
 
     @Transactional
     public UserProfileResDTO saveProfile(Long userId, UserProfileReqDTO req) {
         User user = findUserById(userId);
-        applyProfileFields(user, req);
+        userProfileMapStruct.applyProfileFields(req, user);
         userRepository.save(user);
-        return toProfileResDTO(user);
+        return userProfileMapStruct.toResDTO(user);
     }
 
     @Transactional
     public UserProfileResDTO updateProfile(Long userId, UserProfileReqDTO req) {
         User user = findUserById(userId);
-        applyNonNullFields(user, req);
+        userProfileMapStruct.applyNonNullFields(req, user);
         userRepository.save(user);
-        return toProfileResDTO(user);
+        return userProfileMapStruct.toResDTO(user);
     }
 
     public ProfileStatusResDTO getProfileStatus(Long userId) {
@@ -122,99 +124,6 @@ public class UserProfileService {
     private User findUserById(Long userId) {
         return userRepository.findById(userId)
                 .orElseThrow(() -> new EntityNotFoundException("User not found"));
-    }
-
-    private void applyProfileFields(User user, UserProfileReqDTO req) {
-        // Demographics
-        user.setAge(req.age());
-        user.setGender(req.gender());
-        user.setHeight(req.height());
-        user.setWeight(req.weight());
-
-        // Schedule
-        user.setSleepTime(req.sleepTime());
-        user.setWakeTime(req.wakeTime());
-
-        // Lifestyle
-        user.setActivityLevel(req.activityLevel());
-        user.setOccupation(req.occupation());
-
-        // Daily structure & availability
-        user.setDailyStructure(req.dailyStructure());
-        user.setDailyStructureCustom(req.dailyStructureCustom());
-        user.setBlockedTime(req.blockedTime());
-        user.setFreeTimeWindows(req.freeTimeWindows());
-        user.setEnergyPeak(req.energyPeak());
-        user.setWeekendAvailability(req.weekendAvailability());
-
-        // Obstacles
-        user.setMainObstacle(req.mainObstacle());
-        user.setEnvironmentNotes(req.environmentNotes());
-    }
-
-    private void applyNonNullFields(User user, UserProfileReqDTO req) {
-        // Demographics
-        if (req.age() != null) user.setAge(req.age());
-        if (req.gender() != null) user.setGender(req.gender());
-        if (req.height() != null) user.setHeight(req.height());
-        if (req.weight() != null) user.setWeight(req.weight());
-
-        // Schedule
-        if (req.sleepTime() != null) user.setSleepTime(req.sleepTime());
-        if (req.wakeTime() != null) user.setWakeTime(req.wakeTime());
-
-        // Lifestyle
-        if (req.activityLevel() != null) user.setActivityLevel(req.activityLevel());
-        if (req.occupation() != null) user.setOccupation(req.occupation());
-
-        // Daily structure & availability
-        if (req.dailyStructure() != null) user.setDailyStructure(req.dailyStructure());
-        if (req.dailyStructureCustom() != null) user.setDailyStructureCustom(req.dailyStructureCustom());
-        if (req.blockedTime() != null) user.setBlockedTime(req.blockedTime());
-        if (req.freeTimeWindows() != null) user.setFreeTimeWindows(req.freeTimeWindows());
-        if (req.energyPeak() != null) user.setEnergyPeak(req.energyPeak());
-        if (req.weekendAvailability() != null) user.setWeekendAvailability(req.weekendAvailability());
-
-        // Obstacles
-        if (req.mainObstacle() != null) user.setMainObstacle(req.mainObstacle());
-        if (req.environmentNotes() != null) user.setEnvironmentNotes(req.environmentNotes());
-    }
-
-    private UserProfileResDTO toProfileResDTO(User user) {
-        return new UserProfileResDTO(
-            // Demographics
-            user.getAge(),
-            user.getGender(),
-            user.getHeight(),
-            user.getWeight(),
-
-            // Schedule
-            user.getSleepTime(),
-            user.getWakeTime(),
-
-            // Lifestyle
-            user.getActivityLevel(),
-            user.getOccupation(),
-
-            // Daily structure & availability
-            user.getDailyStructure(),
-            user.getDailyStructureCustom(),
-            user.getBlockedTime(),
-            user.getFreeTimeWindows(),
-            user.getEnergyPeak(),
-            user.getWeekendAvailability(),
-
-            // Obstacles
-            user.getMainObstacle(),
-            user.getEnvironmentNotes(),
-
-            // System flags
-            user.isProfileReadyForMissions() && user.getLlmProfileMarkdown() != null,
-            user.hasScheduleData(),
-            user.hasObstacleData(),
-            user.getLlmProfileMarkdown() != null && !user.getLlmProfileMarkdown().isEmpty(),
-            user.getLlmProfileUpdatedAt()
-        );
     }
 
     private String safeValue(Object value) {

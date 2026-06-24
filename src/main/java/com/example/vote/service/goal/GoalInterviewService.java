@@ -7,6 +7,7 @@ import com.example.vote.dto.goal.MissionGenerationResDTO;
 import com.example.vote.dto.goal.MissionResDTO;
 import com.example.vote.dto.goal.UpdateGoalReqDTO;
 import com.example.vote.exception.BusinessException;
+import com.example.vote.mapstruct.goal.GoalMapStruct;
 import com.example.vote.modal.quest.Difficulty;
 import com.example.vote.modal.quest.Goal;
 import com.example.vote.modal.quest.GoalConversation;
@@ -44,6 +45,7 @@ public class GoalInterviewService {
     private final GoalConversationRepository conversationRepository;
     private final MissionRepository missionRepository;
     private final ObjectMapper objectMapper;
+    private final GoalMapStruct goalMapStruct;
 
     private static final String INTERVIEW_SYSTEM_PROMPT = PromptLoader.load("prompt/goal_interview_prompt.md");
 
@@ -282,17 +284,7 @@ public class GoalInterviewService {
 
                 missionRepository.save(mission);
 
-                result.add(new MissionResDTO(
-                    mission.getId(),
-                    mission.getGoal().getId(),
-                    mission.getTitle(),
-                    mission.getDescription(),
-                    mission.getDifficulty().name(),
-                    mission.getXpReward(),
-                    mission.getWeekNumber(),
-                    mission.getTargetDate(),
-                    mission.getStatus()
-                ));
+                result.add(goalMapStruct.toMissionResDTO(mission));
             }
 
             // Set week cycle expiry and activate goal
@@ -315,10 +307,7 @@ public class GoalInterviewService {
 
         return missionRepository.findByGoalIdOrderByTargetDate(goalId)
             .stream()
-            .map(m -> new MissionResDTO(
-                m.getId(), m.getGoal().getId(), m.getTitle(), m.getDescription(),
-                m.getDifficulty().name(), m.getXpReward(),
-                m.getWeekNumber(), m.getTargetDate(), m.getStatus()))
+            .map(goalMapStruct::toMissionResDTO)
             .toList();
     }
 
@@ -330,7 +319,7 @@ public class GoalInterviewService {
 
         return missionRepository.findByGoalIdAndTargetDateAndStatus(goalId, LocalDate.now(), MissionStatus.ACTIVE)
             .stream()
-            .map(this::toMissionResDTO)
+            .map(goalMapStruct::toMissionResDTO)
             .toList();
     }
 
@@ -347,7 +336,7 @@ public class GoalInterviewService {
 
         mission.setStatus(MissionStatus.DONE);
         missionRepository.save(mission);
-        return toMissionResDTO(mission);
+        return goalMapStruct.toMissionResDTO(mission);
     }
 
     @Transactional
@@ -363,7 +352,7 @@ public class GoalInterviewService {
 
         mission.setStatus(MissionStatus.SKIPPED);
         missionRepository.save(mission);
-        return toMissionResDTO(mission);
+        return goalMapStruct.toMissionResDTO(mission);
     }
 
     @Transactional
@@ -379,7 +368,7 @@ public class GoalInterviewService {
 
         goal.setStatus(GoalStatus.COMPLETED);
         goalRepository.save(goal);
-        return toGoalResDTO(goal);
+        return goalMapStruct.toGoalResDTO(goal);
     }
 
     @Transactional
@@ -395,20 +384,7 @@ public class GoalInterviewService {
         }
 
         goalRepository.save(goal);
-        return toGoalResDTO(goal);
+        return goalMapStruct.toGoalResDTO(goal);
     }
 
-    // --- Private helpers ---
-
-    private MissionResDTO toMissionResDTO(Mission m) {
-        return new MissionResDTO(
-            m.getId(), m.getGoal().getId(), m.getTitle(), m.getDescription(),
-            m.getDifficulty().name(), m.getXpReward(),
-            m.getWeekNumber(), m.getTargetDate(), m.getStatus());
-    }
-
-    private GoalResDTO toGoalResDTO(Goal g) {
-        return new GoalResDTO(
-            g.getId(), g.getTitle(), g.getStatus().name(), g.getCategory(), g.getCreatedAt());
-    }
 }
