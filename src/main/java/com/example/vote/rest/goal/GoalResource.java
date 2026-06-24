@@ -1,4 +1,4 @@
-package com.example.vote.rest;
+package com.example.vote.rest.goal;
 
 import com.example.vote.dto.goal.ChatReqDTO;
 import com.example.vote.dto.goal.ChatResDTO;
